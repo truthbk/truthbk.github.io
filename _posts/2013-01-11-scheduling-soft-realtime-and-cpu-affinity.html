@@ -1,0 +1,42 @@
+---
+layout: post
+title: Scheduling, "soft" realtime, and CPU affinity.
+date: 2013-01-11 14:39:20.000000000 -05:00
+categories:
+- C/C++
+- Linux
+- Software
+tags: []
+status: publish
+type: post
+published: true
+meta:
+  dcssb_short_url: http://su.pr/9a5djN
+  _edit_last: '2'
+author:
+  login: admin
+  email: truthbk@gmail.com
+  display_name: truth
+  first_name: ''
+  last_name: ''
+---
+<p>As many of you will already know your stock linux scheduler allows to flag a process to be scheduled with some <i>"soft"</i> realtime characteristics. This may be excellent in some contexts, but perhaps not a very good idea if not used wisely. More on that later... </p>
+<p>Lets go over a few simple ideas and some history regarding process scheduling. A multiprocess OS needs to manage the processes in execution such that they can share the limited hardware resources (particularly the CPU) to execute them in a seemingly parallel manner. Back in the days of single-core monoprocessor systems (it seems like a long time ago, but most desktop computers up to 2005 or so were such) nothing was really running concurrently on your CPU, but you got that impression nevertheless. Fortunately, processors run at a frequency high enough that we can intertwine the execution of these processes into small <i>slices</i> or chunks of time during which that particular process will occupy the CPU. These slices need to be big enough to allow the CPU to get some real work done for the process and amortize the context switch, but not so lengthy that we cannot execute a bunch of processes in a seemingly parallel form. Just so that you get an idea, imagine 8 concurrent processes and time slices of a quarter of a second. A process will run for 0.25 secs, and stall for another 1.75 secs. If you hate your computer now, imagine what that would be!? A typical time-slice period or quantum has been 10ms (100Hz), which would allow to run 100 processes per second. That sounds better doesn't it. It becomes obvious very quickly how important the scheduling algorithms become, deciding who should run next is definitely not random, and round-robin is simply not good enough.<br />
+<!--more--><br />
+Preemptive multitasking and the preemtible kernel were a huge step forward, it meant that we could remove, or interrupt a process from execution to continue later even when a process was in the middle of execution and actively occupying the CPU. This is what enabled the mechanisms for preemptive multitasking described above to be put in place. Before this, in the old days, processes had to relinquish the CPU voluntarily, imagine that! I wouldn't trust another coder to let me borrow some of "his" (ha!) resources, would you? Thankfully, you can still <i>yield</i> if you wish to do so. <b>Within the kernel not everything is preemtible</b>, some code (ie. interrupt handlers, the scheduler itself) must complete execution to avoid race conditions or leaving the system in an incoherent state.  </p>
+<p>Anyway, as you already know things like priorities were introduced, detailed book-keeping is kept for each process regarding stuff like last time executed, I/O, etc. All of this in an attempt to be as efficient as possible in running processes and also allowing some sort of control from userspace over how these processes are scheduled. You all know how the <i>nice</i> and <i>renice</i> commands allows us to setup the PRIO level from -20 to 20 where -20 is maximum priority and 20 is minimum priority. But that may not be enough for your userspace process. What if you need some sort of guarantee about how this process executes? If you've experimented with nice, you probably already know that it doesn't always offer the spectacular results you come to expect. A process can be interrupted by a process with a higher priority, and I believe it may also be interrupted by a process with the same priority as well. This is when realtime, <i>soft</i> realtime which is what we're talking about here, comes into play. This is an attempt to ensure that a given process will <b>not</b> be interrupted by any other process. Realtime processes will typically be scheduled in round-robin or FIFO fashion. </p>
+<p>When assigning realtime attributes to a process you must specify the scheduling algorithm to use <em>SCHED_OTHER</em> is commonly used for most typical/regular tasks. These tasks have a scheduling priority of 0. <em>SCHED_RR</em> and <em>SCHED_FIFO</em> are used for time-sensitive, special tasks. These tasks are assigned a static, non-zero priority level between 1 - 99. However, of these, only <em>SCHED_FIFO</em> tasks run without being limited to a timeslice and only get preempted by higher priority <em>SCHED_FIFO</em> tasks. Effectively, the highest priority <em>SCHED_FIFO</em> tasks relinquish the CPU only when they yield it themselves. These are the most critical tasks in the system. SCHED_RR tasks have priority levels and privileges much like <em>SCHED_FIFO</em>, except that they are each limited to a timeslice. <em>SCHED_FIFO</em> and <em>SCHED_RR</em> normally require super-user privileges.</p>
+<p>As you can see, this gives the user quite a bit of power regarding the way processes execute. Its obviously a double-edged sword, if you assign realtime properties to a very greedy process that refuses to yield the CPU you may end up with an unresponsive system. Which sucks obviously because if for any reason your userspace code enters an infinite loop or whatever, then you'll freeze the system. I mean, having a userspace app freezing a system is really kind of unacceptable (as a note, there was a patchset written so that this sort of behavior could be curbed, nice read and code starting here: <a href="http://kerneltrap.org/node/3524">kerneltrap</a>).</p>
+<p>Now that we've covered the different scheduling algorithms, we can add into the mix multicore architectures and process affinities. As you all know we can <i>tell</i> a process to run on a specific core. What I wanted to see is how the scheduling algorithms described above affected <i>free</i> processes (ie. processes not pinned to any particular CPU) under different conditions of CPU load for all available cores. So I concocted a little app (I'm pretty sure there's something better out there, but I couldn't quickly find anything so I wrote this myself) you may find it here: <a href="https://github.com/truthbk/scratch/blob/master/mkload/src/mkload.c">mkload</a> on github. The code does precisely what the name suggests: it creates a load - you decide how much. You can then pin these tasks to specific cores. Once that was done, you could launch one more execution of mkload, but setting no CPU affinity to it, and play around with the scheduling algorithm or process priorities to evaluate how the process was actually scheduled:</p>
+<ul>
+<li>How does the process move between cores?</li>
+<li>How much load can that process actually generate?</li>
+</ul>
+<p>I should be posting some actual results here, but the truth is this is all a bit hazy because this post has been in the pipeline for a long time - saved it as a draft months ago and never got around to finishing it properly. If I actually find the results, I'll put them here, but in the meantime, just go crazy and experiment!!! What I do remember is the behavior was not always what one would naively expect. For instance, (under certain scheduling conditions) the free process would end up settling down on a given core, or couple of cores instead of moving around freely so that all tasks as a whole could generate the expected load. The reason behind this is probably due to the fact that swithcing cores constantly could prove detrimental (ie. cache issues - remember L1 and L2 caches on ivy bridge, for instance are not shared across cores). If this interests you, give it a try! The way I conducted my tests was: </p>
+<ul>
+<li><i>N+1</i> mkload processes. N pinned, 1 "<i>free</i>".</li>
+<li>The <i>N</i> pinned processes with same load and scheduling algorithm.</li>
+<li>The free process set to whatever load you feel appropriate, but interesting values would be 100% load or whatever remaining CPU time the N pinned processes leave.</li>
+<li>Check out with top, htop, ps how the process behaves.</li>
+</ul>
+<p>I hope to get those results sometime in the near-future, and hopefully a script to launch the experiment (processes, afinities, etc) automatically. But if I don't, please forgive me and just have some fun!  </p>

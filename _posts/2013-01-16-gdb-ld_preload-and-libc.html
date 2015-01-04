@@ -1,0 +1,46 @@
+---
+layout: post
+title: GDB, LD_PRELOAD and libc
+date: 2013-01-16 15:33:12.000000000 -05:00
+categories:
+- C/C++
+- Linux
+- Software
+tags: []
+status: publish
+type: post
+published: true
+meta:
+  dcssb_short_url: http://su.pr/27F70Y
+  _edit_last: '2'
+author:
+  login: admin
+  email: truthbk@gmail.com
+  display_name: truth
+  first_name: ''
+  last_name: ''
+---
+<p>OK, this is meant to be a short post, just a couple of tips regarding debugging of code you would typically run as such:<br />
+<code>LD_PRELOAD=./somedlib.so ./yourbin</code><br />
+If you're reading this your're probably well aware about what <i>LD_PRELOAD</i> is for, but just in case you don´t let me explain real quick. <i>LD_PRELOAD</i> is an environment variable that allows you to specify the path to a certain shared object (shared library), that library will then be loaded before any other library in the <i>LD_LIBRARY_PATH</i>. That includes libc.so. Doing so allows you, amongst other things, to "intercept" calls to the libc. For example, I'm currently building a memory profiler - a la valgrind, although far less features, but with the goal of minimizing runtime performance impact for the target binary. To build this profiler, I've had to intercept malloc, calloc, realloc, free, etc, because I must account for all memory allocations. So I created my own malloc() (and others) which wraps the call to libc's malloc and performs accounting in the meantime. The way to achieve this is by using LD_PRELOAD. By loading the shared object which contains the code of my custom malloc, I can make sure that when the target binary calls <i>malloc()</i>, it's <b>my malloc</b> that gets executed, and not libc's.<br />
+<!--more--><br />
+Now, that's great, but we need to make sure the code in our shared object is kosher before releasing it, don't we? Which means a lot of debugging. In certain scenarios, like the memory profiler, if your shared library isn't perfect you will surely segfault. You really can't fill up your code with printf's, you really can't, and definitely not as your only means to debugging. OK, strictly speaking the truth is in the code, if you _really_ understand what you're doing debugging would be needlees - this is basically Linus' rationale and the reason there is no kernel debugger in Linux - but we all know it's not always the case :-)<br />
+So enter gdb. How would we debug something like this with gdb? If you're not intercepting the libc or doing anything too fancy you can probably get away with:<br />
+<code><br />
+# gdb<br />
+# (gdb) set environment LD_PRELOAD=/path/to/sobject/yourobject.so<br />
+# (gdb) file /path/to/binary/yourbin<br />
+# (gdb) r<br />
+</code><br />
+However, this might not be a good idea in more complex cases. The reason is gdb will not call your code directly, what gdb really does is equivalent to:<br />
+<code><br />
+LD_PRELOAD=/path/to/sobject/yourobject.so bash -c '/path/to/binary/yourbin'<br />
+</code><br />
+So an undebugged or partially flawed yourobject.so library could potentially break bash. Well, not bash itself, just bash when running with yourobject.so preloaded. So, what I <b>recommend</b> you do is set an execution wrapper for gdb, that way you will not impose the LD_PRELOAD environment variable on the gdb shell environment. Summing up, do it this way:<br />
+<code><br />
+# (gdb) set exec-wrapper env 'LD_PRELOAD=/path/to/sobject/yourobject.so'<br />
+# (gdb) file /path/to/binary/yourbin<br />
+# (gdb) r<br />
+</code><br />
+You should now be able to debug accordingly. Enjoy your crashes, and happy debugging! :P</p>
+<p><b>SECURITY NOTE</b>: Many of you are probably wondering about the security risks intercepting the libc could pose. Well, although it is fun to play around with it, and you might manage mess around with some userspace stuff, the potential damage is limited by the fact that the loader will ignore LD_PRELOAD directives if the effective UID is different to the real UID, this complicates privilege escalation, naturally.</p>

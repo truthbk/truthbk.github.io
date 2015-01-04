@@ -1,0 +1,48 @@
+---
+layout: post
+title: Processing + OpenCV on 64 bit Linux
+date: 2010-08-29 00:06:14.000000000 -04:00
+categories:
+- OpenCV
+- Processing
+tags: []
+status: publish
+type: post
+published: true
+meta:
+  _edit_last: '1'
+  dcssb_short_url: http://su.pr/1zIZ0n
+  _pingme: '1'
+  _encloseme: '1'
+  _syntaxhighlighter_encoded: '1'
+author:
+  login: admin
+  email: truthbk@gmail.com
+  display_name: truth
+  first_name: ''
+  last_name: ''
+---
+<p>OK, so I recently decided I wanted to try my hands on processing, opencv, hopefully eventually interfacing with some arduino hacks. Nothing special, nothing new, just in the mood of experimenting a little bit with video and computer vision, you've all seen how big and popular augmented reality is becoming.</p>
+<p>Anyway, I configure my kernel to enable the video4linux ps2 camera drivers, I download <a href="http://processing.org/">processing</a>, I install <a href="http://sourceforge.net/projects/opencvlibrary/">OpenCV</a>, and finally get my hands on the <a href="http://ubaa.net/shared/processing/opencv/">OpenCV library for processing</a>. You have all the documentation you need at the links above to set up the environment. So I'm all pumped and ready to roll, about to testdrive a simple processing+opencv code snippet when I get:</p>
+<p>[bash]<br />
+ !!! required library not found : /usr/lib/libOpenCV.so: /usr/lib/libOpenCV.so: wrong ELF class: ELFCLASS32 (Possible cause: architecture word width mismatch)<br />
+ Exception in thread &quot;Animation Thread&quot; java.lang.UnsatisfiedLinkError: hypermedia.video.OpenCV.capture(III)V<br />
+ at hypermedia.video.OpenCV.capture(Native Method)<br />
+ at hypermedia.video.OpenCV.capture(OpenCV.java:945)<br />
+ at blobs.setup(blobs.java:38)<br />
+ at processing.core.PApplet.handleDraw(PApplet.java:1403)<br />
+ at processing.core.PApplet.run(PApplet.java:1328)<br />
+ at java.lang.Thread.run(Thread.java:619)</p>
+<p>[/bash]</p>
+<p>We don't really need to be geniuses to figure out what was going on there. Obviously the library shipped is a 32 bit binary. In my case I am on a 64 bit system, with a 64 bit OpenCV. But looking into the OpenCV library for processing I was relieved to see that the sources were included (this is why open source is so beautiful). Anyway, all we really have to do to solve this is recompile the library. Here are the steps you should follow:</p>
+<ol>
+<li>change to the directory where you installed the  opencv library, in my case I put it in the libraries directory within the processing directory.[bash]cd /opt/processing-1.2.1/libraries/OpenCV/source/java/hypermedia/video[/bash]</li>
+<li>Compile the library.[bash]javac -classpath /opt/processing-1.2.1/lib/core.jar Blob.java OpenCV.java[/bash]</li>
+<li>Generate the C Header/Stub File using javah.[bash]cd ../../ &amp;&amp; javah -jni hypermedia.video.OpenCV[/bash]</li>
+<li>Compile and link the actual <code>libOpenCV.so</code> OpenCV library for processing.<br />
+[bash]g++ -shared OpenCV.cpp -o libOpenCV.so -I/usr/include/opencv/ -I/opt/sun-jdk-1.6.0.20/include -I/opt/sun-jdk-1.6.0.20/include/linux/ -lcv -lhighgui -fPIC[/bash]</li>
+</ol>
+<p>Make sure the included  (-I) directories in the last command above refer to your current JDK. You need the <code>$JDK_HOME/include/linux</code> (as you can see, in my case $JDK_HOME was /opt/sun-jdk-1.6.0.20) to be able to link properly with <code>jni.h</code>.</p>
+<p>Once you have your libOpenCV.so compiled and linked, all you need to do is replace the 32 bit version that was originally shipped:</p>
+<p>[bash]cp libOpenCV.so /opt/processing-1.2.1/libraries/OpenCV/library/[/bash]</p>
+<p>And that's it really, you are now good to go and start playing around!</p>

@@ -1,0 +1,186 @@
+---
+layout: post
+title: Send To Self
+date: 2010-08-25 03:48:18.000000000 -04:00
+categories:
+- Kernel
+- Linux
+- Networking
+tags: []
+status: publish
+type: post
+published: true
+meta:
+  _edit_last: '2'
+  dcssb_short_url: http://su.pr/3kJFuS
+author:
+  login: admin
+  email: truthbk@gmail.com
+  display_name: truth
+  first_name: ''
+  last_name: ''
+---
+<p>Recently I was handed over one of the best 10 GE NIC's out there, a <a href="http://www.mellanox.com/content/pages.php?pg=products_dyn&amp;product_family=20&amp;menu_section=28">Mellanox Technologies MT26448 [ConnectX EN 10GigE, PCIe 2.0 5GT/s]</a> (rev a0). I was asked to experiment with it and see what sort of performance was achievable. The problem was only had one card to play with. Since it was dual-port card the call was obvious: connect the ports with each other in a loop. I already knew this wasn't going to be all that straightforward....</p>
+<p>The machine I was going to use to testdrive the NIC, a 6GB RAM, Intel i7, rig was running linux. Fedora Core 12 to be precise, not that this matters. Anyway, the linux kernel by design will route all local traffic through itself and not the network. So when I configured the interface for each of the ports, the kernel would know those ip's were local and would therefore not send the traffic through the actual network. Not a great thing to test network performance :)</p>
+<p><!--more--></p>
+<p>At first I thought perhaps disabling the loopback interface, setting up a manual route from one of the interfaces to the other, and ensuring the ARP table had the corresponding MAC/IP pairs for each of the ports would suffice to get the actual packets out on the physical network. But Nay!!!! The kernel always knows the interface is local and sends the packets through itself rather than through the network.</p>
+<p>A little googling led me to <a href="http://www.ssi.bg/~ja/">Julian Anastasov's site</a> and his excellent collection of linux kernel networking patches. One of his works includes a patch to achieve exactly what I needed, send to yourself but through the network. You may not have the patch for the exact version of your kernel, but the code is actually quite straightforward and quite simple to adapt to your kernel version/flavor.<br />
+<code><br />
+diff -urp v2.6.34/linux/Documentation/networking/ip-sysctl.txt linux/Documentation/networking/ip-sysctl.txt<br />
+--- v2.6.34/linux/Documentation/networking/ip-sysctl.txt	2010-05-17 10:48:46.000000000 +0300<br />
++++ linux/Documentation/networking/ip-sysctl.txt	2010-05-19 00:01:30.000000000 +0300<br />
+@@ -693,6 +693,13 @@ accept_redirects - BOOLEAN<br />
+forwarding - BOOLEAN<br />
+Enable IP forwarding on this interface.</code></p>
+<p><code> </code></p>
+<p><code>+loop - BOOLEAN<br />
++	By default (loop=0) the traffic between local IP addresses<br />
++	is routed via interface "lo". Setting this flag for two<br />
++	interfaces allows traffic between their IP addresses to<br />
++	be looped externally. This is useful for setups where the<br />
++	interfaces are attached to same broadcast medium.<br />
++<br />
+mc_forwarding - BOOLEAN<br />
+Do multicast routing. The kernel needs to be compiled with CONFIG_MROUTE<br />
+and a multicast routing daemon is required.<br />
+diff -urp v2.6.34/linux/include/linux/inetdevice.h linux/include/linux/inetdevice.h<br />
+--- v2.6.34/linux/include/linux/inetdevice.h	2010-05-17 10:49:00.000000000 +0300<br />
++++ linux/include/linux/inetdevice.h	2010-05-19 00:02:09.000000000 +0300<br />
+@@ -29,6 +29,7 @@ enum<br />
+IPV4_DEVCONF_NOXFRM,<br />
+IPV4_DEVCONF_NOPOLICY,<br />
+IPV4_DEVCONF_FORCE_IGMP_VERSION,<br />
++	IPV4_DEVCONF_LOOP,<br />
+IPV4_DEVCONF_ARP_ANNOUNCE,<br />
+IPV4_DEVCONF_ARP_IGNORE,<br />
+IPV4_DEVCONF_PROMOTE_SECONDARIES,<br />
+@@ -137,6 +138,7 @@ static inline void ipv4_devconf_setall(s<br />
+IN_DEV_ORCONF((in_dev), ACCEPT_REDIRECTS)))</p>
+<p>#define IN_DEV_ARPFILTER(in_dev)	IN_DEV_ORCONF((in_dev), ARPFILTER)<br />
++#define IN_DEV_LOOP(in_dev)		IN_DEV_CONF_GET(in_dev, LOOP)<br />
+#define IN_DEV_ARP_ANNOUNCE(in_dev)	IN_DEV_MAXCONF((in_dev), ARP_ANNOUNCE)<br />
+#define IN_DEV_ARP_IGNORE(in_dev)	IN_DEV_MAXCONF((in_dev), ARP_IGNORE)<br />
+#define IN_DEV_ARP_NOTIFY(in_dev)	IN_DEV_MAXCONF((in_dev), ARP_NOTIFY)<br />
+diff -urp v2.6.34/linux/net/ipv4/devinet.c linux/net/ipv4/devinet.c<br />
+--- v2.6.34/linux/net/ipv4/devinet.c	2010-05-17 10:49:01.000000000 +0300<br />
++++ linux/net/ipv4/devinet.c	2010-05-19 00:02:56.000000000 +0300<br />
+@@ -1410,6 +1410,7 @@ static struct devinet_sysctl_table {<br />
+DEVINET_SYSCTL_RW_ENTRY(LOG_MARTIANS, "log_martians"),<br />
+DEVINET_SYSCTL_RW_ENTRY(TAG, "tag"),<br />
+DEVINET_SYSCTL_RW_ENTRY(ARPFILTER, "arp_filter"),<br />
++		DEVINET_SYSCTL_RW_ENTRY(LOOP, "loop"),<br />
+DEVINET_SYSCTL_RW_ENTRY(ARP_ANNOUNCE, "arp_announce"),<br />
+DEVINET_SYSCTL_RW_ENTRY(ARP_IGNORE, "arp_ignore"),<br />
+DEVINET_SYSCTL_RW_ENTRY(ARP_ACCEPT, "arp_accept"),<br />
+diff -urp v2.6.34/linux/net/ipv4/fib_frontend.c linux/net/ipv4/fib_frontend.c<br />
+--- v2.6.34/linux/net/ipv4/fib_frontend.c	2010-05-17 10:49:01.000000000 +0300<br />
++++ linux/net/ipv4/fib_frontend.c	2010-05-19 00:01:30.000000000 +0300<br />
+@@ -243,6 +243,7 @@ int fib_validate_source(__be32 src, __be</p>
+<p>struct fib_result res;<br />
+int no_addr, rpf, accept_local;<br />
++	int loop = 0;<br />
+int ret;<br />
+struct net *net;</p>
+<p>@@ -255,6 +256,7 @@ int fib_validate_source(__be32 src, __be<br />
+accept_local = IN_DEV_ACCEPT_LOCAL(in_dev);<br />
+if (mark &amp;&amp; !IN_DEV_SRC_VMARK(in_dev))<br />
+fl.mark = 0;<br />
++		loop = IN_DEV_LOOP(in_dev);<br />
+}<br />
+rcu_read_unlock();</p>
+<p>@@ -264,6 +266,11 @@ int fib_validate_source(__be32 src, __be<br />
+net = dev_net(dev);<br />
+if (fib_lookup(net, &amp;fl, &amp;res))<br />
+goto last_resort;<br />
++	if (loop &amp;&amp; res.type == RTN_LOCAL) {<br />
++		*spec_dst = FIB_RES_PREFSRC(res);<br />
++		fib_res_put(&amp;res);<br />
++		return 0;<br />
++	}<br />
+if (res.type != RTN_UNICAST) {<br />
+if (res.type != RTN_LOCAL || !accept_local)<br />
+goto e_inval_res;<br />
+diff -urp v2.6.34/linux/net/ipv4/route.c linux/net/ipv4/route.c<br />
+--- v2.6.34/linux/net/ipv4/route.c	2010-05-17 10:49:01.000000000 +0300<br />
++++ linux/net/ipv4/route.c	2010-05-19 00:01:30.000000000 +0300<br />
+@@ -2609,6 +2609,11 @@ static int ip_route_output_slow(struct n<br />
+dev_put(dev_out);<br />
+goto out;	/* Wrong error code */<br />
+}<br />
++		err = -ENETDOWN;<br />
++		if (!(dev_out-&gt;flags&amp;IFF_UP)) {<br />
++			dev_put(dev_out);<br />
++			goto out;<br />
++		}</p>
+<p>if (ipv4_is_local_multicast(oldflp-&gt;fl4_dst) ||<br />
+oldflp-&gt;fl4_dst == htonl(0xFFFFFFFF)) {<br />
+@@ -2676,10 +2681,41 @@ static int ip_route_output_slow(struct n<br />
+free_res = 1;</p>
+<p></code></p>
+<p><code> if (res.type == RTN_LOCAL) {<br />
+-		if (!fl.fl4_src)<br />
+-			fl.fl4_src = fl.fl4_dst;<br />
++		struct in_device *in_dev;<br />
++		__be32 src;<br />
++<br />
+if (dev_out)<br />
+dev_put(dev_out);<br />
++		dev_out = FIB_RES_DEV(res);<br />
++		in_dev = in_dev_get(dev_out);<br />
++		src = fl.fl4_src? : FIB_RES_PREFSRC(res);<br />
++		if (in_dev &amp;&amp; IN_DEV_LOOP(in_dev) &amp;&amp; src) {<br />
++			struct net_device *dev_src;<br />
++<br />
++			in_dev_put(in_dev);<br />
++			in_dev = NULL;<br />
++			dev_src = ip_dev_find(net, src);<br />
++			if (dev_src &amp;&amp; dev_src != dev_out &amp;&amp;<br />
++			    (in_dev = in_dev_get(dev_src)) &amp;&amp;<br />
++			    IN_DEV_LOOP(in_dev)) {<br />
++				in_dev_put(in_dev);<br />
++				dev_out = dev_src;<br />
++				fl.fl4_src = src;<br />
++				fl.oif = dev_out-&gt;ifindex;<br />
++				res.type = RTN_UNICAST;<br />
++				if (res.fi) {<br />
++					fib_info_put(res.fi);<br />
++					res.fi = NULL;<br />
++				}<br />
++				goto make_route;<br />
++			}<br />
++			if (dev_src)<br />
++				dev_put(dev_src);<br />
++		}<br />
++		if (in_dev)<br />
++			in_dev_put(in_dev);<br />
++		if (!fl.fl4_src)<br />
++			fl.fl4_src = fl.fl4_dst;<br />
+dev_out = net-&gt;loopback_dev;<br />
+dev_hold(dev_out);<br />
+fl.oif = dev_out-&gt;ifindex;<br />
+</code></p>
+<p>You need to apply the patch to your kernel sources. It's not a good idea to patch the original sources, so get yourself a copy of the sources you wish to patch. It's usually wise to do a dry run, to see if all hunks are successfully applied.</p>
+<p><code><br />
+# patch -p1 --dry-run &lt; patch.diff<br />
+</code></p>
+<p>Once that's fine, note that you may have to modify the patch slightly depending of the kernel sources you're attempting to patch, just go ahead:</p>
+<p><code><br />
+# patch -p1 &lt; patch.diff<br />
+</code></p>
+<p>Once that's done, recompile your kernel!! You don't really need to do much, probably your old .config should be good to go. If you're using Fedora or Ubuntu you may need to compile your kernel the Fedora/Ubuntu way.... I use Gentoo, so all I need to do is the usual</p>
+<p><code><br />
+# make clean<br />
+# make oldconfig<br />
+# make menuconfig<br />
+# make &amp;&amp; make modules_install<br />
+</code></p>
+<p>set up your kernel with grub, and reboot!! You should be pretty much ready to go!!! Once you boot into the new kernel, you need to configure the kernel via the proc interface to send to yourself via the network. This is done as follows (for instance):</p>
+<p><code><br />
+# echo 1 &gt; /proc/sys/net/ipv4/conf/eth0/loop<br />
+# echo 1 &gt; /proc/sys/net/ipv4/conf/eth1/loop<br />
+# ip address add 192.168.1.1 dev eth0<br />
+# ip address add 192.168.2.1 dev eth1<br />
+# ip route replace local 192.168.2.1 dev eth1 scope host src 192.168.1.1 proto kernel<br />
+# ip route replace local 192.168.1.1 dev eth0 scope host src 192.168.2.1 proto kernel<br />
+</code></p>
+<p>You should now be ready to try to evaluate your dual-port card. However beware, if you're trying to evaluate a 10GE card such as the mellanox card described above, the kernel can only process so many interrupts per unit of time. If you try to both TX and RX at 10GE with the same machine, the kernel might not be able to cope with the volume of interrupts, memory copies, etc and so the performance figures should surely be inferior to those you obtain if you were using two machines.</p>

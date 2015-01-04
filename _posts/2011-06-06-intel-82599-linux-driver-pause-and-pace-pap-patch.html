@@ -1,0 +1,196 @@
+---
+layout: post
+title: Intel 82599 Linux driver Pause & Pace (PAP) Patch
+date: 2011-06-06 19:35:53.000000000 -04:00
+categories:
+- Drivers
+- Kernel
+- Linux
+- Software
+tags: []
+status: publish
+type: post
+published: true
+meta:
+  _edit_last: '2'
+  _syntaxhighlighter_encoded: '1'
+  dcssb_short_url: http://su.pr/1aP97L
+author:
+  login: admin
+  email: truthbk@gmail.com
+  display_name: truth
+  first_name: ''
+  last_name: ''
+---
+<p>Lately, while carrying out some work with the great little piece of hardware the Intel 82599 10GE NICs are, we came across the need to actually pace connections. We could obviously negotiate to different speeds: 100Mbit, 1Gbit and 10Gbit. That wasn't bad, but it didn't give us the timing granularity we wanted. We really wanted to set up paces in gigabit steps 1-10 Gbit. Anway, the purpose for the pacing was the fact that we have got a resource intensive (particularly network intensive) which could lead to packet loss when computational resources were scarce on the receiving side. We could obviously go the leaky bucket way, which would fill at the corresponding rate, allowing us to throttle the pace. That was cool, but added to the computational cost of the transmission protocol. In fact, it was implemented because not everyone will have an 82599 based NIC at their availability. But the leaky bucket also had other limitations and inconveniences, ie. timer granularity at 5-10 Gbps speeds when dealing with small packets <100 Bytes enters the nanosecond scale: not good, sleeping precisely in that timescale is just not trivial. How about doing all of this by hardware!? Enter <a href="http://download.intel.com/design/network/datashts/82599_datasheet.pdf">intel 82599 datasheet</a>.</p>
+<p>In the intro we can read that these NIC's allow for pacing via TRS (transmit rate limiting) which is achieved introducing an IPG (Inter-packet Gap), using the MAUI interface (gotta love that for an interface name!). On pages 122 and 544 of the datasheet you will find more detailed information regarding how the pacing is achieved and the corresponding register in the hardware: the PAP register. As described in the documentation you may achieve:</p>
+<p>1-10 Gbps granularity (0001b, 0010b, 0011b, 0100b, 0101b, 0110b, 0111b, 1000b, 1001b, 1111b, 0000b). The PAP Register takes in values of the type 0x000YFFFF, where Y is the rate of pacing you wish to achieve. You may have noticed that there are in fact 11 hex values described above, 0000b is for 10Gbps, 0001b is for 1Gbps, and they increase in steps of 1Gbps up until value 1110b which is 9 Gbps. And we then we have one "rogue" value 1111b which is for a 9.294 Gbps (don't ask :P ).</p>
+<p>Well, as great as this is and sounds, it wasn't implemented on the driver. I took a quick look at ethtool's interface but unfortunately there was no possibility of adding pacing to the driver via ethtool. So I had to resort to a custom IOCTL, which would allow adjusting the pace by using the SIOCDEVPRIVATE ioctl flag.<br />
+<!--more--><br />
+Now, without further ado, here is the ugly patch (beware of endianess!).</p>
+<p>[diff]<br />
+diff -urNp ixgbe-3.3.9//src/Makefile ixgbe-3.3.9-pap//src/Makefile<br />
+--- ixgbe-3.3.9//src/Makefile	2011-04-20 01:06:31.000000000 +0200<br />
++++ ixgbe-3.3.9-pap//src/Makefile	2011-06-06 17:23:14.422000009 +0200<br />
+@@ -36,11 +36,13 @@ CFILES = ixgbe_main.c ixgbe_common.c ixg<br />
+          ixgbe_sriov.c ixgbe_mbx.c<br />
+          ixgbe_dcb.c ixgbe_dcb_82598.c<br />
+          ixgbe_dcb_82599.c<br />
+-         ixgbe_phy.c<br />
++         ixgbe_phy.c<br />
++	 ixgbe_pap.c<br />
+ HFILES = ixgbe.h ixgbe_common.h ixgbe_api.h ixgbe_osdep.h kcompat.h<br />
+          ixgbe_sriov.h ixgbe_mbx.h<br />
+          ixgbe_dcb.h<br />
+-         ixgbe_phy.h<br />
++         ixgbe_phy.h<br />
++	 ixgbe_pap.h<br />
+ ifeq (,$(BUILD_KERNEL))<br />
+ BUILD_KERNEL=$(shell uname -r)<br />
+ endif<br />
+@@ -146,6 +148,7 @@ ifeq ($(ARCH),ppc64)<br />
+ endif</p>
+<p> # extra flags for module builds<br />
++EXTRA_CFLAGS += -DPAP_IOCTL<br />
+ EXTRA_CFLAGS += -DDRIVER_$(shell echo $(DRIVER_NAME) | tr '[a-z]' '[A-Z]')<br />
+ EXTRA_CFLAGS += -DDRIVER_NAME=$(DRIVER_NAME)<br />
+ EXTRA_CFLAGS += -DDRIVER_NAME_CAPS=$(shell echo $(DRIVER_NAME) | tr '[a-z]' '[A-Z]')<br />
+diff -urNp ixgbe-3.3.9//src/ixgbe_main.c ixgbe-3.3.9-pap//src/ixgbe_main.c<br />
+--- ixgbe-3.3.9//src/ixgbe_main.c	2011-04-20 01:06:31.000000000 +0200<br />
++++ ixgbe-3.3.9-pap//src/ixgbe_main.c	2011-06-06 17:20:54.661000009 +0200<br />
+@@ -52,6 +52,9 @@<br />
+ #ifdef SIOCETHTOOL<br />
+ #include &lt;linux/ethtool.h&gt;<br />
+ #endif<br />
++#ifdef PAP_IOCTL<br />
++#include &quot;ixgbe_pap.h&quot;<br />
++#endif</p>
+<p> #include &quot;ixgbe.h&quot;</p>
+<p>@@ -7837,9 +7840,14 @@ static int ixgbe_del_sanmac_netdev(struc<br />
+  **/<br />
+ static int ixgbe_ioctl(struct net_device *netdev, struct ifreq *ifr, int cmd)<br />
+ {<br />
++	struct ixgbe_adapter *adapter = netdev_priv(netdev);<br />
+ 	switch (cmd) {<br />
+ 	case SIOCETHTOOL:<br />
+ 		return ethtool_ioctl(ifr);<br />
++#ifdef PAP_IOCTL<br />
++	case SIOCDEVPRIVATE:<br />
++		return pap_rate_adjust(adapter, ifr);<br />
++#endif<br />
+ 	default:<br />
+ 		return -EOPNOTSUPP;<br />
+ 	}<br />
+diff -urNp ixgbe-3.3.9//src/ixgbe_pap.c ixgbe-3.3.9-pap//src/ixgbe_pap.c<br />
+--- ixgbe-3.3.9//src/ixgbe_pap.c	1970-01-01 01:00:00.000000000 +0100<br />
++++ ixgbe-3.3.9-pap//src/ixgbe_pap.c	2011-06-06 17:31:42.683000010 +0200<br />
+@@ -0,0 +1,73 @@<br />
++/*<br />
++ *<br />
++ *<br />
++ *       Filename:  ixgbe_pap.c<br />
++ *<br />
++ *    Description:<br />
++ *<br />
++ *        Version:  1.0<br />
++ *        Created:  06/06/11 16:42:59<br />
++ *       Revision:  none<br />
++ *       Compiler:  gcc<br />
++ *<br />
++ *         Author:  Jaime Fullaondo,<br />
++ *        Company:  HPCN at UAM<br />
++ *<br />
++ *<br />
++ */<br />
++<br />
++#include &lt;linux/types.h&gt;<br />
++#include &lt;linux/vmalloc.h&gt;<br />
++#include &lt;linux/netdevice.h&gt;<br />
++<br />
++#include &quot;ixgbe_pap.h&quot;<br />
++#include &quot;ixgbe_type.h&quot;<br />
++<br />
++<br />
++int pap_rate_adjust_ioctl(struct ixgbe_adapter *adapter, struct ifreq *ifr)<br />
++{<br />
++	struct ixgbe_hw *hw = &amp;adapter-&gt;hw;<br />
++	u32 pap_rate = IXGBE_PAP_REG_TEMPLATE; /* A little concerned over endianess... */<br />
++<br />
++	switch(ifr-&gt;ifr_bandwidth)<br />
++	{<br />
++		case 1:<br />
++			pap_rate |= (0x1 &lt;&lt; IXGBE_PAP_OFFSET);<br />
++			break;<br />
++		case 2:<br />
++			pap_rate |= (0x2 &lt;&lt; IXGBE_PAP_OFFSET);<br />
++			break;<br />
++		case 3:<br />
++			pap_rate |= (0x3 &lt;&lt; IXGBE_PAP_OFFSET);<br />
++			break;<br />
++		case 4:<br />
++			pap_rate |= (0x4 &lt;&lt; IXGBE_PAP_OFFSET);<br />
++			break;<br />
++		case 5:<br />
++			pap_rate |= (0x5 &lt;&lt; IXGBE_PAP_OFFSET);<br />
++			break;<br />
++		case 6:<br />
++			pap_rate |= (0x6 &lt;&lt; IXGBE_PAP_OFFSET);<br />
++			break;<br />
++		case 7:<br />
++			pap_rate |= (0x7 &lt;&lt; IXGBE_PAP_OFFSET);<br />
++			break;<br />
++		case 8:<br />
++			pap_rate |= (0x8 &lt;&lt; IXGBE_PAP_OFFSET);<br />
++			break;<br />
++		case 9:<br />
++			pap_rate |= (0x9 &lt;&lt; IXGBE_PAP_OFFSET);<br />
++			break;<br />
++		case 10:<br />
++		case 0:<br />
++			break;<br />
++		default:<br />
++			return -EINVAL;<br />
++	}<br />
++	IXGBE_WRITE_REG(hw, IXGBE_PAP, pap_rate);<br />
++	IXGBE_WRITE_FLUSH(hw); /* Is this necessary */<br />
++<br />
++	/* Add a short delay */<br />
++	msleep(50);<br />
++	return 0;<br />
++}<br />
+diff -urNp ixgbe-3.3.9//src/ixgbe_pap.h ixgbe-3.3.9-pap//src/ixgbe_pap.h<br />
+--- ixgbe-3.3.9//src/ixgbe_pap.h	1970-01-01 01:00:00.000000000 +0100<br />
++++ ixgbe-3.3.9-pap//src/ixgbe_pap.h	2011-06-06 17:28:27.587000010 +0200<br />
+@@ -0,0 +1,31 @@<br />
++/*<br />
++ *<br />
++ *<br />
++ *       Filename:  ixgbe_pap.h<br />
++ *<br />
++ *    Description:<br />
++ *<br />
++ *        Version:  1.0<br />
++ *        Created:  06/06/11 16:38:39<br />
++ *       Revision:  none<br />
++ *       Compiler:  gcc<br />
++ *<br />
++ *         Author:  Jaime Fullaondo (),<br />
++ *        Company:  HPCN - High Performance Computing and Networking Lab at UAM<br />
++ *<br />
++ *<br />
++ */<br />
++<br />
++#ifndef _IXGBE_PAP_H<br />
++#define _IXGBE_PAP_H<br />
++<br />
++#include &lt;linux/if.h&gt;<br />
++<br />
++#include &quot;ixgbe.h&quot;<br />
++<br />
++#define IXGBE_PAP_REG_TEMPLATE 0x0000FFFF<br />
++#define IXGBE_PAP_OFFSET 16<br />
++<br />
++int pap_rate_adjust_ioctl(struct ixgbe_adapter *adapter, struct ifreq *ifr);<br />
++<br />
++#endif /* _IXGBE_PAP_H  */<br />
+[/diff] </p>

@@ -1,0 +1,124 @@
+---
+layout: post
+title: SSH Tunnel Proxy Script (and some digression)
+date: 2011-12-16 03:00:46.000000000 -05:00
+categories:
+- Linux
+- Mac OS X
+- Scripting
+- Software
+tags: []
+status: publish
+type: post
+published: true
+meta:
+  dcssb_short_url: http://su.pr/5txTsy
+  _syntaxhighlighter_encoded: '1'
+  _edit_last: '2'
+author:
+  login: admin
+  email: truthbk@gmail.com
+  display_name: truth
+  first_name: ''
+  last_name: ''
+---
+<p>Loooong time. I'm sorry about that.... Like Biggie Smalls and Lisa Stansfield would say: "Been around the world, and I, I, I, I can find my baby". That's all quite true actually. Moved to Berlin from my hometown of Madrid, and in the process I had to leave my girl. I'm sorry ladies, we have not split up, but she had to remain home for personal reasons. It is what it is: fucked up. Yeah I know ladies, don't care about my relationship status. I guess I'm just talking out of frustration here, cause this post was supposed to be about surfing via an ssh tunnel. I'm not going to be real technical about it, I'm kind of tired today. The matter of the fact is, that now that I'm in Germany, I sometimes find myself using public WLAN's, or simply using the internet in ways I don't really want ISP's to monitor. SO I decided to go down the 'SSH tunnel' route to secure my communications a little bit. Since I've got a machine back home in madrid, a machine I trust and I feel is quite secure, and with a very decent internet connection, I decided to tunnel through it. I wrote a quick little script (originally for Mac OS X), but it's really quite portable (although you will have to enable the proxy manually in Linux, for example). The script establishes the ssh tunnel, and configures the local SOCKS proxy to use that tunnel we've created. The script can also be used to enable/disable the proxy. It is a little blunt in the activation because it kills all on-going ssh sessions, so use with caution. I'll be back soon with more stuff.</p>
+<p>[bash]<br />
+#!/bin/bash</p>
+<p>usage() {<br />
+ cat &lt;&lt; EOF</p>
+<p> usage: `basename $0` [options]</p>
+<p> This script establishes an ssh tunnel through the hostname provided.</p>
+<p> OPTIONS:<br />
+   -h      Show this message<br />
+   -r      Hostname of server through which you wish to ssh tunnel<br />
+   -l      Hostname login or username<br />
+   -d      Local device you wish to activate SOCKS proxy for.<br />
+   -p      Port through which you wish to tunnel (default: 8080)<br />
+   -x      Disable ssh tunnel and proxy configuration<br />
+EOF<br />
+}</p>
+<p>USERNAME=<br />
+HOSTNAME=<br />
+DEVICE=<br />
+DISABLE=<br />
+PORT=8080<br />
+ISMAC=0</p>
+<p>if [ $(uname)==&quot;Darwin&quot; ]; then<br />
+	ISMAC=1<br />
+fi</p>
+<p>while getopts &quot;:l:r:d:p:hx&quot; opt; do<br />
+    case $opt in<br />
+     l)<br />
+        USERNAME=$OPTARG<br />
+        ;;<br />
+     d)<br />
+        DEVICE=$OPTARG<br />
+        ;;<br />
+     r)<br />
+	HOSTNAME=$OPTARG<br />
+        ;;<br />
+     x)<br />
+	DISABLE=1<br />
+        ;;<br />
+     p)<br />
+	PORT=$OPTARG<br />
+        ;;<br />
+     h)<br />
+	usage<br />
+	exit 0<br />
+        ;;<br />
+    ?)<br />
+        usage<br />
+        exit 1<br />
+      ;;<br />
+  esac<br />
+done</p>
+<p>if [[ -z $DEVICE ]]<br />
+then<br />
+    echo &quot;Error: No network device specified.n&quot;<br />
+    usage<br />
+    exit 1<br />
+fi</p>
+<p>if [[ $DISABLE -eq 1 ]];<br />
+then<br />
+    echo 'disabling ssh tunnel, and SOCKS proxy.'<br />
+    if [[ 1 -eq $ISMAC ]];<br />
+    then<br />
+        networksetup -setsocksfirewallproxystate $DEVICE off<br />
+    fi</p>
+<p>    kill -9 $(ps aux |grep 'ssh -D 8080 -f -C -q -N' | grep -v 'grep' | head -n1 | awk '{ print $2 }')<br />
+    exit 0<br />
+fi</p>
+<p>if [[ $DISABLE -eq 1 ]];<br />
+then<br />
+    echo 'disabling ssh tunnel, and SOCKS proxy.'<br />
+    if [ 1 -eq $ISMAC ];<br />
+    then<br />
+        networksetup -setsocksfirewallproxystate $DEVICE off<br />
+    fi</p>
+<p>    killall ssh<br />
+    exit 0<br />
+fi</p>
+<p>if [[ -z $USERNAME ]] || [[ -z $HOSTNAME ]]<br />
+then<br />
+     echo &quot;Error: Hostname and username must be specified.n&quot;<br />
+     usage<br />
+     exit 1<br />
+fi</p>
+<p>echo 'creating ssh tunnel...'<br />
+ssh -D $PORT -f -C -q -N $USERNAME@$HOSTNAME<br />
+if [ 0 -eq $? ];<br />
+then<br />
+	echo 'ssh tunnel create succesfully.'<br />
+else<br />
+	echo 'host down or wrong password.'<br />
+	exit 1<br />
+fi</p>
+<p>if [ 1 -eq $ISMAC ];<br />
+then<br />
+	networksetup -setsocksfirewallproxy $DEVICE 127.0.0.1 $PORT off<br />
+fi<br />
+echo &quot;SOCKS proxy activated succesfully on device: $DEVICE&quot;<br />
+exit 0</p>
+<p>[/bash] </p>

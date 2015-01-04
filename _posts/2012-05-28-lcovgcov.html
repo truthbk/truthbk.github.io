@@ -1,0 +1,195 @@
+---
+layout: post
+title: LCOV/GCOV
+date: 2012-05-28 19:35:49.000000000 -04:00
+categories:
+- Linux
+- Python
+- Scripting
+- Software
+tags: []
+status: publish
+type: post
+published: true
+meta:
+  dcssb_short_url: http://su.pr/1KFoRx
+  _syntaxhighlighter_encoded: '1'
+  _edit_last: '2'
+author:
+  login: admin
+  email: truthbk@gmail.com
+  display_name: truth
+  first_name: ''
+  last_name: ''
+---
+<p>Long time, I know. I'm not fulfilling my blogging duties lately, and although I've been busy it still not a good enough excuse. One post every three months or something like that... really not acceptable. Anyway, hopefully I can pick up the slack in the near future and make up for the lost time.</p>
+<p>Anyway, cutting the chase. Recently I was asked at work to increase the code coverage for a bunch of regression and unit tests. The framework used is based around <a href="http://docs.python.org/library/unittest.html">python's unit test framework</a>, and the actual code to run the test's on is C/C++. Although some additional work had to go to create the python wrappers+bindings using <a href="http://www.boost.org/doc/libs/1_49_0/libs/python/doc/">boost::python</a>, this allowed to write fairly convoluted and advanced blackbox modular tests for C/C++ code with the ease and comfort python provides. I'm personally quite comfortable and happy with the <a href="http://cppunit.sourceforge.net/doc/lastest/index.html">CppUnit framework</a>, but I have to admit python allows to code things very quickly.</p>
+<p>Prior to this little task I was familiar with gcc's <a href="http://gcc.gnu.org/onlinedocs/gcc/Gcov.html">gcov</a> and what a helpful tool it was to evaluate code coverage for unit tests:</p>
+<ul>
+<li>% (fraction) of lines executed.</li>
+<li>% (fraction) of functions/methods executed.</li>
+<li>% (fraction) of classes used.</li>
+<li>branching data.</li>
+<li>...</li>
+</ul>
+<p>What I wasn't quite aware was of the amount of data that was actually stored into gcov's data files (with <em>.gcda</em> extension). This is where lcov enters the game to generate some outstanding and impressive HTML reports for the corresponding code. I will get right back to this. Gcov is real similar to gprof and both work together very well to deliver some very detailed profiling information. They both require their corresponding flags activated at compile-time, <em>-ftest-coverage</em> and <em>-pg</em> respectively, to instrument the code appropriately and generate files necessary to reconstruct all runtime information. In the case of gcov these are the <em>.gcno</em> files which contain information to reconstruct the basic block graphs and assign source line numbers to blocks.</p>
+<p>Once you run your tests, the <em>.gcda</em> files are created with the mentioned runtime info. Lcov will the parse everything to generate reports like the following (I am unable to post reports for our reports, but here are some <a href="http://www.lornajane.net/posts/2009/testing-php">publicy available</a> examples):</p>
+<p><!--more--></p>
+<p style="text-align: center;"><a href="http://www.lornajane.net/uploads/tech/lcov.png" rel="lightbox[lcov reports]"><img class="aligncenter" title="LCOV report" src="assets/lcov.png" alt="" width="600" height="349" /></a></p>
+<p style="text-align: center;"><a href="http://www.lornajane.net/uploads/tech/lcov3.png" rel="=&quot;lightbox[lcov"><img class="aligncenter" title="LCOV report" src="assets/lcov3.png" alt="" width="600" height="337" /></a></p>
+<p>The examples shown above are for php code (there a gcov implementation for <a href="http://gcov.php.net/">that</a>), but I can guarantee the reports are pretty much identical for C/C++ code. But it gets better. Lcov is recursive, so if you have a medium/large project with several modules, libraries, which are independent in their own right, as long as they're all under the same source tree lcov will do a great job at finding the results for each and every one of those modules and creating an HTML report tree that will let you navigate easily over them. Well, I actually had to hack a little script for that to be as seamless as it sounds, so here it goes:</p>
+<p>[bash]<br />
+#!/bin/bash<br />
+#<br />
+# this script assumes your project has a source tree structure as follows:<br />
+#<br />
+#    PROJ/<br />
+#          MOD_1/<br />
+#          MOD_2/<br />
+#          ...<br />
+#          MOD_n/</p>
+<p>usage() {<br />
+        echo &quot;usage: `basename $0` [options]&quot;<br />
+        echo -e &quot;tThis script generates gcov coverage reports.n&quot;<br />
+        echo -e &quot;Options:&quot;<br />
+        echo -e &quot;t-d DIRt: Indicate project dir.nn&quot;<br />
+        echo -e &quot;t-bt: generate baseline info (Call before running tests).&quot;<br />
+        echo -e &quot;t-tt: generate total info (Call after running tests).&quot;<br />
+        echo -e &quot;t-r DIRt: generate HTML reports and place in specified DIR(Call after running tests).nn&quot;<br />
+        echo -e &quot;t-ct: clean all gcov files in project dir.&quot;<br />
+        echo -e &quot;t-qt: Quiet.&quot;<br />
+        echo -e &quot;t-ht: Show this help message.nn&quot;<br />
+}</p>
+<p>ERRORS=0<br />
+GCDAS=&quot;&quot;<br />
+GCNOS=&quot;&quot;<br />
+CLEAN=<br />
+QUIET=<br />
+BASELINE=<br />
+TOTAL=<br />
+HTML=<br />
+HTMLDIR=<br />
+PJDIR=.<br />
+while getopts &quot;hcbtqr:d:&quot; OPTION<br />
+do<br />
+        case $OPTION in<br />
+                h)<br />
+                        usage<br />
+                        exit 1<br />
+                        ;;<br />
+                c)<br />
+                        CLEAN=1<br />
+                        ;;<br />
+                q)<br />
+                        QUIET=1<br />
+                        ;;<br />
+                d)<br />
+                        PJDIR=$OPTARG<br />
+                        ;;<br />
+                b)<br />
+                        BASELINE=1<br />
+                        ;;<br />
+                t)<br />
+                        TOTAL=1<br />
+                        ;;<br />
+                r)<br />
+                        HTML=1<br />
+                        HTMLDIR=$OPTARG<br />
+                        ;;<br />
+                ?)<br />
+                        usage<br />
+                        exit<br />
+                        ;;<br />
+        esac<br />
+done</p>
+<p>if [[ -z $BASELINE ]] &amp;&amp; [[ -z $TOTAL ]] &amp;&amp; [[ -z $HTML ]] &amp;&amp; [[ -z $CLEAN ]];<br />
+then<br />
+        echo -e &quot;No appropriate option flag passed!n&quot;<br />
+        usage<br />
+        exit 1<br />
+fi</p>
+<p>if [[ $BASELINE == 1 ]];<br />
+then<br />
+        echo &quot;Generating baseline info files...&quot;<br />
+        for i in $(find $PJDIR -maxdepth 1 -type d | awk '{ if (NR != 1) { print } }' | sed 's/.///');<br />
+        do<br />
+#               for j in $(find $PJDIR/$i -type f -name &quot;*.gcno&quot; -exec dirname {} ;);<br />
+#               do<br />
+#                       GCNOS=&quot; $GCNOS -d $j&quot;<br />
+#               done</p>
+<p>                if [[ ! -z $QUIET ]];<br />
+                then<br />
+                        lcov -c -i -d $PJDIR/$i -o ${i}_baseline.info &gt;/dev/null 2&gt;&amp;1<br />
+                else<br />
+                        lcov -c -i -d $PJDIR/$i -o ${i}_baseline.info<br />
+                fi</p>
+<p>        done<br />
+        echo &quot;You may now run your regression.&quot;<br />
+        exit 0;<br />
+fi</p>
+<p>if [[ $TOTAL == 1 ]];<br />
+then<br />
+        echo &quot;Generating test info and gcov files...&quot;<br />
+        for i in $(find $PJDIR -maxdepth 1 -type d | awk '{ if (NR != 1) { print } }' | sed 's/.///');<br />
+        do<br />
+#               for j in $(find $PJDIR/$i -type f -name &quot;*.gcda&quot; -exec dirname {} ;);<br />
+#               do<br />
+#                       GCDAS=&quot; $GCDAS -d $j&quot;<br />
+#               done<br />
+                if [[ ! -z $QUIET ]];<br />
+                then<br />
+                        lcov -c -d $PJDIR/$i -o $PJDIR/${i}_test.info &gt;/dev/null 2&gt;&amp;1<br />
+                        lcov -a $PJDIR/${i}_baseline.info -a $PJDIR/${i}_test.info -o $PJDIR/${i}_total.info &gt;/dev/null 2&gt;&amp;1<br />
+                else<br />
+                        lcov -c -d $PJDIR/$i -o $PJDIR/${i}_test.info<br />
+                        lcov -a $PJDIR/${i}_baseline.info -a $PJDIR/${i}_test.info -o $PJDIR/${i}_total.info<br />
+                fi<br />
+                        GCDAS=&quot;&quot;</p>
+<p>                if [[ ! -z $? ]];<br />
+                then<br />
+                        ERRORS=1<br />
+                fi<br />
+        done<br />
+fi</p>
+<p>if [[ $HTML == 1 ]];<br />
+then<br />
+        echo &quot;Generating html reports...&quot;<br />
+        for i in $(find $PJDIR -maxdepth 1 -type d | awk '{ if (NR != 1) { print } }' | sed 's/.///');<br />
+        do<br />
+                if [[ -e $PJDIR/${i}_total.info ]];<br />
+                then<br />
+                        mkdir -p $HTMLDIR/${i}<br />
+                        if [[ ! -z $QUIET ]];<br />
+                        then<br />
+                                genhtml -o $HTMLDIR/${i} $PJDIR/${i}_total.info &gt;/dev/null 2&gt;&amp;1<br />
+                        else<br />
+                                genhtml -o $HTMLDIR/${i} $PJDIR/${i}_total.info<br />
+                        fi</p>
+<p>                        if [[ ! -z $? ]];<br />
+                        then<br />
+                                ERRORS=1<br />
+                        fi<br />
+                fi<br />
+        done<br />
+fi</p>
+<p>if [[ $CLEAN == 1 ]];<br />
+then<br />
+        echo &quot;Removing info files...&quot;<br />
+        rm $PJDIR/*_baseline.info<br />
+        rm $PJDIR/*_test.info<br />
+        rm $PJDIR/*_total.info<br />
+        echo &quot;Removing gcda files...&quot;<br />
+        find $PJDIR -type f -name &quot;*.gcda&quot; -exec rm -f {} ;<br />
+fi</p>
+<p>if [[ ! -z $ERRORS ]];<br />
+then<br />
+        echo -e &quot;&#92;&#48;33[1mWARNING&#92;&#48;33[0m:tScript completed succesfully but there were non-critical errors.&quot;<br />
+        if [[ $QUIET == 1 ]];<br />
+        then<br />
+                echo -e &quot;ttconsider running the script in verbose (non-quiet) mode.&quot;<br />
+        fi<br />
+fi<br />
+[/bash]</p>
+<p>A quick note, for gcov to be able to correlate the execution data, the <em>.gcno</em> and <em>.gcda</em> files should contain the same timestamp tag. This basically means that both files should be generated by objects (binaries) from the same build run. This makes perfect sense, if the <em>gcno</em> and <em>gcda's</em> are not for the same source, then they simply cannot be used together. The problem is that when you have a modular project, you can have partial builds where you rebuild a single module. Now, if that source references objects/functions/methods/... from any of the other modules that were <strong>not</strong> recompiled you will start getting some bogus results. The LCOV reports will get generated, but they'll report a whole lot of 0% coverage stats. The cause is differing build runs for the modules involved. Everything should be fine if you recompile the entire project (all modules) in the same build run.</p>
+<p>Other than the standard GCC Gcov and LCOV documentation I highly recommend <a href="http://bobah.net/d4d/tools/code-coverage-with-gcov">this article</a>.</p>
+<p>You can also find this script (and others) in my github <a href="https://github.com/truthbk/scripts">scripts repo</a>.</p>

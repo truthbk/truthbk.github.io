@@ -1,0 +1,37 @@
+---
+layout: post
+title: Hooking Malloc (libc's facilities vs LD_PRELOAD)
+date: 2012-05-29 15:51:54.000000000 -04:00
+categories:
+- C/C++
+- Linux
+- Software
+tags: []
+status: publish
+type: post
+published: true
+meta:
+  dcssb_short_url: http://su.pr/29HCGm
+  _edit_last: '2'
+author:
+  login: admin
+  email: truthbk@gmail.com
+  display_name: truth
+  first_name: ''
+  last_name: ''
+---
+<p>Quick post, this could develop into a series of posts (not on hooking malloc, but on memory profiling), but for now I just wanted to make a quick one. Hooking malloc is fairly common practice, in fact so common that the <a href="http://www.gnu.org/savannah-checkouts/gnu/libc/manual/html_node/Hooks-for-Malloc.html">GNU C library</a> allows you to define these hooks explicitly. If you define the available variables (function pointers) for hooking <i>__malloc_hook, __realloc_hook, __free_hook, __memalign_hook, __malloc_initialize_hook</i>, you will be able to have your hooks called everytime malloc(), free(), etc... are called. There is another method to achieve the exact same goal, which is based upon the fact that we can preload a dynamic library at runtime with <b>LD_PRELOAD</b>. If that library defines malloc(), free(), etc..., those will take precedence over the ones defined in libc; and you can then call the original implementation from there or write your own. This LD_PRELOAD technique is very versatile, so versatile in fact that it is very common in userspace rootkits (you should probably note that if LD_PRELOAD is set as an environment variable all programs/commands will load those libraries before running, effectively hooking malloc() or whatever, for all of them), etc. Either possibility offers a wide array of opportunities, just to name a few:</p>
+<ul>
+<li>custom malloc implementations</li>
+<li>Accounting, Statistics</li>
+<li>Improved performance memory profiling</li>
+</ul>
+<p><!--more--><br />
+However there are pitfalls to this method, first and foremost if you take a look at the actual GNU C library malloc implementation and at how these hooks are actually used you will quickly realize that they are not thread-safe at all. This is already quite significant. The second aspect that should be taken into account is the fact that if you want to entirely "skip" the original malloc implementation these hooks do not achieve this. In fact that is the fundamental difference between the two methods described above:</p>
+<ol>
+<li>Libc malloc hooks method: <b>libc's</b> malloc() implementation <b>IS</b> called first, your hook is then called from within if defined.</li>
+<li>LD_PRELOAD method: <b>your</b> malloc() function implementation is called first. Its then up to you to call libc's or any other malloc implementation.</li>
+</ol>
+<p>We can immediately see that if you're going to use tcmalloc, jemalloc, dlmalloc, or any other implementation that may not offer hooking, the first method described above will fall short. The second one however will always "intercept" the calls, to whatever implementation.</p>
+<p>There's yet another thing which makes the second alternative a little more flexible. And its the fact that it works pretty much transparently. You load the library, and that's it. You're good to go, which means you can use it with any binary you got that will call malloc. The first method however, requires instrumenting your code and "configuring" the hooks beforehand. You might be able to resort to some trickery as to combine both techniques (will have to think about that one). But I believe this is pretty much the big picture.</p>
+<p>I am working on a memory profiling/leak utility, <b>milu</b>, which I should release quite soon. It's not even building yet (although most of the basic coding has been done), so please be a little patient :-) If you want to take peek, you can find it in my <a href="https://github.com/truthbk/milu">github</a>. I basically want to see how much better than valgrind I can do in terms of performance without having to sacrifice getting backtraces to the leak locations. </p>
