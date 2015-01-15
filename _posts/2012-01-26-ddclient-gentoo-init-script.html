@@ -20,48 +20,50 @@ author:
   first_name: ''
   last_name: ''
 ---
-<p>Hello people, I know I've been absent for a while and I'm sorry about that. Then again, its not like I have legions following me, so my guess is no one has really noticed :)<br />
-Anyway, I have a nice few posts coming up. Particularly one regarding a small "fork" or mod of intel's igb NIC driver that allows parallel traffic capture from several processes from userspace with zero-copy and avoiding skbuff overhead. But I don't want to get ahead of myself, that will be coming up, together with the github(most likely) repo and explanation.</p>
-<p>This post is really nothing special, I just hope it can help some gentoo users like myself. My ISP recently changed my service from fixed ip to dynamic ip (yup, I somehow managed to keep a fixed IP address for something like 8 years). So my <a href="http://dyndns.org>dyndns.org account needs a constant update of the DNS records. They suggest two alternatives <a href="http://dyn.com/support/clients/linux/ddclient/">ddclient</a> and <a href="http://dyn.com/support/clients/linux/inadyn/">inadyn</a>, and as you can see in their links, they provide some decent literature and even config file generators, not bad. I went for ddclient, a perl based client. Ddclient comes ready with init script for debian, fedora, ubuntu,... users. But as you may know, gentoo users are not as common. Furthermore, init scripts are a little different in gentoo (I think in this case different is better). I want the ddclient daemon to start automatically at startup, so I needed/wanted the corresponding init.d gentoo script. I quickly hacked one up. Enjoy.  </p>
-<p>[bash]<br />
-#!/sbin/runscript<br />
-# This file is part of ddclient for gentoo.<br />
-#<br />
-# Author: Jaime Fullaondo<br />
-# </p>
-<p>CONF=/etc/ddclient/ddclient.conf<br />
-DDCLIENT=&quot;/usr/sbin/ddclient&quot;</p>
-<p>PID=`ps -aef | grep &quot;$program - sleep&quot; | grep -v grep | awk '{print $2}'`</p>
-<p>depend() {<br />
-	need net<br />
-	need logger<br />
-}</p>
-<p>start() {<br />
-	ebegin &quot;Starting ddclient&quot;<br />
-	if [ ! -d /var/run/ddclient ]; then<br />
-		mkdir /var/run/ddclient || return 1<br />
-	fi</p>
-<p>	DELAY=`grep -v '^s*#' $CONF | grep -i -m 1 &quot;daemon&quot; | awk -F '=' '{print $2}'`<br />
-	if [ -z &quot;$DELAY&quot; ] ; then<br />
-        	DELAY=&quot;-daemon 300&quot;<br />
-	else<br />
-		DELAY=''<br />
-	fi<br />
-	${DDCLIENT} $DELAY<br />
-	eend $? &quot;Failed to start ddclient&quot;<br />
-}</p>
-<p>stop() {<br />
-	ebegin &quot;Stopping ddclient&quot;<br />
-	if [ -n &quot;$PID&quot; ] ; then<br />
-		kill $PID<br />
-	fi<br />
-	eend $? &quot;Failed to stop ddclient&quot;<br />
-}</p>
-<p>restart() {<br />
-	if ! service_stopped &quot;${SVCNAME}&quot; ; then<br />
-		svc_stop || return &quot;$?&quot;<br />
-		sleep 1<br />
-	fi<br />
-	svc_start<br />
-}<br />
-[/bash] </p>
+Hello people, I know I've been absent for a while and I'm sorry about that. Then again, its not like I have legions following me, so my guess is no one has really noticed :)
+Anyway, I have a nice few posts coming up. Particularly one regarding a small "fork" or mod of intel's igb NIC driver that allows parallel traffic capture from several processes from userspace with zero-copy and avoiding skbuff overhead. But I don't want to get ahead of myself, that will be coming up, together with the github(most likely) repo and explanation.
+
+This post is really nothing special, I just hope it can help some gentoo users like myself. My ISP recently changed my service from fixed ip to dynamic ip (yup, I somehow managed to keep a fixed IP address for something like 8 years). So my <a href="http://dyndns.org>dyndns.org account needs a constant update of the DNS records. They suggest two alternatives <a href="http://dyn.com/support/clients/linux/ddclient/">ddclient</a> and <a href="http://dyn.com/support/clients/linux/inadyn/">inadyn</a>, and as you can see in their links, they provide some decent literature and even config file generators, not bad. I went for ddclient, a perl based client. Ddclient comes ready with init script for debian, fedora, ubuntu,... users. But as you may know, gentoo users are not as common. Furthermore, init scripts are a little different in gentoo (I think in this case different is better). I want the ddclient daemon to start automatically at startup, so I needed/wanted the corresponding init.d gentoo script. I quickly hacked one up. Enjoy.
+
+<p>
+#!/sbin/runscript
+# This file is part of ddclient for gentoo.
+#
+# Author: Jaime Fullaondo
+#
+</p>
+CONF=/etc/ddclient/ddclient.conf
+DDCLIENT="/usr/sbin/ddclient"
+PID=`ps -aef | grep "$program - sleep" | grep -v grep | awk '{print $2}'`
+depend() {
+	need net
+	need logger
+}
+start() {
+	ebegin "Starting ddclient"
+	if [ ! -d /var/run/ddclient ]; then
+		mkdir /var/run/ddclient || return 1
+	fi
+	DELAY=`grep -v '^s*#' $CONF | grep -i -m 1 "daemon" | awk -F '=' '{print $2}'`
+	if [ -z "$DELAY" ] ; then
+        	DELAY="-daemon 300"
+	else
+		DELAY=''
+	fi
+	${DDCLIENT} $DELAY
+	eend $? "Failed to start ddclient"
+}
+stop() {
+	ebegin "Stopping ddclient"
+	if [ -n "$PID" ] ; then
+		kill $PID
+	fi
+	eend $? "Failed to stop ddclient"
+}
+restart() {
+	if ! service_stopped "${SVCNAME}" ; then
+		svc_stop || return "$?"
+		sleep 1
+	fi
+	svc_start
+}
