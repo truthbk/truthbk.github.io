@@ -25,7 +25,7 @@ Anyway, I have a nice few posts coming up. Particularly one regarding a small "f
 
 This post is really nothing special, I just hope it can help some gentoo users like myself. My ISP recently changed my service from fixed ip to dynamic ip (yup, I somehow managed to keep a fixed IP address for something like 8 years). So my [dyndns.org](http://dyndns.org) account needs a constant update of the DNS records. They suggest two alternatives [ddclient](http://dyn.com/support/clients/linux/ddclient/) and [inadyn](http://dyn.com/support/clients/linux/inadyn/), and as you can see in their links, they provide some decent literature and even config file generators, not bad. I went for ddclient, a perl based client. Ddclient comes ready with init script for debian, fedora, ubuntu,... users. But as you may know, gentoo users are not as common. Furthermore, init scripts are a little different in gentoo (I think in this case different is better). I want the ddclient daemon to start automatically at startup, so I needed/wanted the corresponding init.d gentoo script. I quickly hacked one up. Enjoy.
 
-```
+```bash
 #!/sbin/runscript
 # This file is part of ddclient for gentoo.
 #
@@ -45,7 +45,7 @@ start() {
 	fi
 	DELAY=`grep -v '^s*#' $CONF | grep -i -m 1 "daemon" | awk -F '=' '{print $2}'`
 	if [ -z "$DELAY" ] ; then
-        	DELAY="-daemon 300"
+		DELAY="-daemon 300"
 	else
 		DELAY=''
 	fi
