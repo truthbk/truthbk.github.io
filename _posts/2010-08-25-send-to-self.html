@@ -25,7 +25,7 @@ author:
 <p><!--more--></p>
 <p>At first I thought perhaps disabling the loopback interface, setting up a manual route from one of the interfaces to the other, and ensuring the ARP table had the corresponding MAC/IP pairs for each of the ports would suffice to get the actual packets out on the physical network. But Nay!!!! The kernel always knows the interface is local and sends the packets through itself rather than through the network.</p>
 <p>A little googling led me to <a href="http://www.ssi.bg/~ja/">Julian Anastasov's site</a> and his excellent collection of linux kernel networking patches. One of his works includes a patch to achieve exactly what I needed, send to yourself but through the network. You may not have the patch for the exact version of your kernel, but the code is actually quite straightforward and quite simple to adapt to your kernel version/flavor.<br />
-<code><br />
+<!-- <code><br /> -->
 diff -urp v2.6.34/linux/Documentation/networking/ip-sysctl.txt linux/Documentation/networking/ip-sysctl.txt<br />
 --- v2.6.34/linux/Documentation/networking/ip-sysctl.txt	2010-05-17 10:48:46.000000000 +0300<br />
 +++ linux/Documentation/networking/ip-sysctl.txt	2010-05-19 00:01:30.000000000 +0300<br />
@@ -43,6 +43,7 @@ Enable IP forwarding on this interface.</code></p>
 mc_forwarding - BOOLEAN<br />
 Do multicast routing. The kernel needs to be compiled with CONFIG_MROUTE<br />
 and a multicast routing daemon is required.<br />
+{% highlight diff %}
 diff -urp v2.6.34/linux/include/linux/inetdevice.h linux/include/linux/inetdevice.h<br />
 --- v2.6.34/linux/include/linux/inetdevice.h	2010-05-17 10:49:00.000000000 +0300<br />
 +++ linux/include/linux/inetdevice.h	2010-05-19 00:02:09.000000000 +0300<br />
@@ -158,7 +159,8 @@ dev_put(dev_out);<br />
 dev_out = net-&gt;loopback_dev;<br />
 dev_hold(dev_out);<br />
 fl.oif = dev_out-&gt;ifindex;<br />
-</code></p>
+<!-- </code></p> -->
+{% endhighlight %}
 <p>You need to apply the patch to your kernel sources. It's not a good idea to patch the original sources, so get yourself a copy of the sources you wish to patch. It's usually wise to do a dry run, to see if all hunks are successfully applied.</p>
 <p><code><br />
 # patch -p1 --dry-run &lt; patch.diff<br />
