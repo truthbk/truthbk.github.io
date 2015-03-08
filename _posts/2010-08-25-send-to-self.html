@@ -26,139 +26,138 @@ author:
 <p>At first I thought perhaps disabling the loopback interface, setting up a manual route from one of the interfaces to the other, and ensuring the ARP table had the corresponding MAC/IP pairs for each of the ports would suffice to get the actual packets out on the physical network. But Nay!!!! The kernel always knows the interface is local and sends the packets through itself rather than through the network.</p>
 <p>A little googling led me to <a href="http://www.ssi.bg/~ja/">Julian Anastasov's site</a> and his excellent collection of linux kernel networking patches. One of his works includes a patch to achieve exactly what I needed, send to yourself but through the network. You may not have the patch for the exact version of your kernel, but the code is actually quite straightforward and quite simple to adapt to your kernel version/flavor.<br />
 <!-- <code><br /> -->
-diff -urp v2.6.34/linux/Documentation/networking/ip-sysctl.txt linux/Documentation/networking/ip-sysctl.txt<br />
---- v2.6.34/linux/Documentation/networking/ip-sysctl.txt	2010-05-17 10:48:46.000000000 +0300<br />
-+++ linux/Documentation/networking/ip-sysctl.txt	2010-05-19 00:01:30.000000000 +0300<br />
-@@ -693,6 +693,13 @@ accept_redirects - BOOLEAN<br />
-forwarding - BOOLEAN<br />
-Enable IP forwarding on this interface.</code></p>
-<p><code> </code></p>
-<p><code>+loop - BOOLEAN<br />
-+	By default (loop=0) the traffic between local IP addresses<br />
-+	is routed via interface "lo". Setting this flag for two<br />
-+	interfaces allows traffic between their IP addresses to<br />
-+	be looped externally. This is useful for setups where the<br />
-+	interfaces are attached to same broadcast medium.<br />
-+<br />
-mc_forwarding - BOOLEAN<br />
-Do multicast routing. The kernel needs to be compiled with CONFIG_MROUTE<br />
-and a multicast routing daemon is required.<br />
 {% highlight diff %}
-diff -urp v2.6.34/linux/include/linux/inetdevice.h linux/include/linux/inetdevice.h<br />
---- v2.6.34/linux/include/linux/inetdevice.h	2010-05-17 10:49:00.000000000 +0300<br />
-+++ linux/include/linux/inetdevice.h	2010-05-19 00:02:09.000000000 +0300<br />
-@@ -29,6 +29,7 @@ enum<br />
-IPV4_DEVCONF_NOXFRM,<br />
-IPV4_DEVCONF_NOPOLICY,<br />
-IPV4_DEVCONF_FORCE_IGMP_VERSION,<br />
-+	IPV4_DEVCONF_LOOP,<br />
-IPV4_DEVCONF_ARP_ANNOUNCE,<br />
-IPV4_DEVCONF_ARP_IGNORE,<br />
-IPV4_DEVCONF_PROMOTE_SECONDARIES,<br />
-@@ -137,6 +138,7 @@ static inline void ipv4_devconf_setall(s<br />
+diff -urp v2.6.34/linux/Documentation/networking/ip-sysctl.txt linux/Documentation/networking/ip-sysctl.txt
+--- v2.6.34/linux/Documentation/networking/ip-sysctl.txt	2010-05-17 10:48:46.000000000 +0300
++++ linux/Documentation/networking/ip-sysctl.txt	2010-05-19 00:01:30.000000000 +0300
+@@ -693,6 +693,13 @@ accept_redirects - BOOLEAN
+forwarding - BOOLEAN
+Enable IP forwarding on this interface.
++loop - BOOLEAN
++	By default (loop=0) the traffic between local IP addresses
++	is routed via interface "lo". Setting this flag for two
++	interfaces allows traffic between their IP addresses to
++	be looped externally. This is useful for setups where the
++	interfaces are attached to same broadcast medium.
++
+mc_forwarding - BOOLEAN
+Do multicast routing. The kernel needs to be compiled with CONFIG_MROUTE
+and a multicast routing daemon is required.
+diff -urp v2.6.34/linux/include/linux/inetdevice.h linux/include/linux/inetdevice.h
+--- v2.6.34/linux/include/linux/inetdevice.h	2010-05-17 10:49:00.000000000 +0300
++++ linux/include/linux/inetdevice.h	2010-05-19 00:02:09.000000000 +0300
+@@ -29,6 +29,7 @@ enum
+IPV4_DEVCONF_NOXFRM,
+IPV4_DEVCONF_NOPOLICY,
+IPV4_DEVCONF_FORCE_IGMP_VERSION,
++	IPV4_DEVCONF_LOOP,
+IPV4_DEVCONF_ARP_ANNOUNCE,
+IPV4_DEVCONF_ARP_IGNORE,
+IPV4_DEVCONF_PROMOTE_SECONDARIES,
+@@ -137,6 +138,7 @@ static inline void ipv4_devconf_setall(s
 IN_DEV_ORCONF((in_dev), ACCEPT_REDIRECTS)))</p>
-<p>#define IN_DEV_ARPFILTER(in_dev)	IN_DEV_ORCONF((in_dev), ARPFILTER)<br />
-+#define IN_DEV_LOOP(in_dev)		IN_DEV_CONF_GET(in_dev, LOOP)<br />
-#define IN_DEV_ARP_ANNOUNCE(in_dev)	IN_DEV_MAXCONF((in_dev), ARP_ANNOUNCE)<br />
-#define IN_DEV_ARP_IGNORE(in_dev)	IN_DEV_MAXCONF((in_dev), ARP_IGNORE)<br />
-#define IN_DEV_ARP_NOTIFY(in_dev)	IN_DEV_MAXCONF((in_dev), ARP_NOTIFY)<br />
-diff -urp v2.6.34/linux/net/ipv4/devinet.c linux/net/ipv4/devinet.c<br />
---- v2.6.34/linux/net/ipv4/devinet.c	2010-05-17 10:49:01.000000000 +0300<br />
-+++ linux/net/ipv4/devinet.c	2010-05-19 00:02:56.000000000 +0300<br />
-@@ -1410,6 +1410,7 @@ static struct devinet_sysctl_table {<br />
-DEVINET_SYSCTL_RW_ENTRY(LOG_MARTIANS, "log_martians"),<br />
-DEVINET_SYSCTL_RW_ENTRY(TAG, "tag"),<br />
-DEVINET_SYSCTL_RW_ENTRY(ARPFILTER, "arp_filter"),<br />
-+		DEVINET_SYSCTL_RW_ENTRY(LOOP, "loop"),<br />
-DEVINET_SYSCTL_RW_ENTRY(ARP_ANNOUNCE, "arp_announce"),<br />
-DEVINET_SYSCTL_RW_ENTRY(ARP_IGNORE, "arp_ignore"),<br />
-DEVINET_SYSCTL_RW_ENTRY(ARP_ACCEPT, "arp_accept"),<br />
-diff -urp v2.6.34/linux/net/ipv4/fib_frontend.c linux/net/ipv4/fib_frontend.c<br />
---- v2.6.34/linux/net/ipv4/fib_frontend.c	2010-05-17 10:49:01.000000000 +0300<br />
-+++ linux/net/ipv4/fib_frontend.c	2010-05-19 00:01:30.000000000 +0300<br />
+<p>#define IN_DEV_ARPFILTER(in_dev)	IN_DEV_ORCONF((in_dev), ARPFILTER)
++#define IN_DEV_LOOP(in_dev)		IN_DEV_CONF_GET(in_dev, LOOP)
+#define IN_DEV_ARP_ANNOUNCE(in_dev)	IN_DEV_MAXCONF((in_dev), ARP_ANNOUNCE)
+#define IN_DEV_ARP_IGNORE(in_dev)	IN_DEV_MAXCONF((in_dev), ARP_IGNORE)
+#define IN_DEV_ARP_NOTIFY(in_dev)	IN_DEV_MAXCONF((in_dev), ARP_NOTIFY)
+diff -urp v2.6.34/linux/net/ipv4/devinet.c linux/net/ipv4/devinet.c
+--- v2.6.34/linux/net/ipv4/devinet.c	2010-05-17 10:49:01.000000000 +0300
++++ linux/net/ipv4/devinet.c	2010-05-19 00:02:56.000000000 +0300
+@@ -1410,6 +1410,7 @@ static struct devinet_sysctl_table {
+DEVINET_SYSCTL_RW_ENTRY(LOG_MARTIANS, "log_martians"),
+DEVINET_SYSCTL_RW_ENTRY(TAG, "tag"),
+DEVINET_SYSCTL_RW_ENTRY(ARPFILTER, "arp_filter"),
++		DEVINET_SYSCTL_RW_ENTRY(LOOP, "loop"),
+DEVINET_SYSCTL_RW_ENTRY(ARP_ANNOUNCE, "arp_announce"),
+DEVINET_SYSCTL_RW_ENTRY(ARP_IGNORE, "arp_ignore"),
+DEVINET_SYSCTL_RW_ENTRY(ARP_ACCEPT, "arp_accept"),
+diff -urp v2.6.34/linux/net/ipv4/fib_frontend.c linux/net/ipv4/fib_frontend.c
+--- v2.6.34/linux/net/ipv4/fib_frontend.c	2010-05-17 10:49:01.000000000 +0300
++++ linux/net/ipv4/fib_frontend.c	2010-05-19 00:01:30.000000000 +0300
 @@ -243,6 +243,7 @@ int fib_validate_source(__be32 src, __be</p>
-<p>struct fib_result res;<br />
-int no_addr, rpf, accept_local;<br />
-+	int loop = 0;<br />
-int ret;<br />
+<p>struct fib_result res;
+int no_addr, rpf, accept_local;
++	int loop = 0;
+int ret;
 struct net *net;</p>
-<p>@@ -255,6 +256,7 @@ int fib_validate_source(__be32 src, __be<br />
-accept_local = IN_DEV_ACCEPT_LOCAL(in_dev);<br />
-if (mark &amp;&amp; !IN_DEV_SRC_VMARK(in_dev))<br />
-fl.mark = 0;<br />
-+		loop = IN_DEV_LOOP(in_dev);<br />
-}<br />
+<p>@@ -255,6 +256,7 @@ int fib_validate_source(__be32 src, __be
+accept_local = IN_DEV_ACCEPT_LOCAL(in_dev);
+if (mark &amp;&amp; !IN_DEV_SRC_VMARK(in_dev))
+fl.mark = 0;
++		loop = IN_DEV_LOOP(in_dev);
+}
 rcu_read_unlock();</p>
-<p>@@ -264,6 +266,11 @@ int fib_validate_source(__be32 src, __be<br />
-net = dev_net(dev);<br />
-if (fib_lookup(net, &amp;fl, &amp;res))<br />
-goto last_resort;<br />
-+	if (loop &amp;&amp; res.type == RTN_LOCAL) {<br />
-+		*spec_dst = FIB_RES_PREFSRC(res);<br />
-+		fib_res_put(&amp;res);<br />
-+		return 0;<br />
-+	}<br />
-if (res.type != RTN_UNICAST) {<br />
-if (res.type != RTN_LOCAL || !accept_local)<br />
-goto e_inval_res;<br />
-diff -urp v2.6.34/linux/net/ipv4/route.c linux/net/ipv4/route.c<br />
---- v2.6.34/linux/net/ipv4/route.c	2010-05-17 10:49:01.000000000 +0300<br />
-+++ linux/net/ipv4/route.c	2010-05-19 00:01:30.000000000 +0300<br />
-@@ -2609,6 +2609,11 @@ static int ip_route_output_slow(struct n<br />
-dev_put(dev_out);<br />
-goto out;	/* Wrong error code */<br />
-}<br />
-+		err = -ENETDOWN;<br />
-+		if (!(dev_out-&gt;flags&amp;IFF_UP)) {<br />
-+			dev_put(dev_out);<br />
-+			goto out;<br />
+<p>@@ -264,6 +266,11 @@ int fib_validate_source(__be32 src, __be
+net = dev_net(dev);
+if (fib_lookup(net, &amp;fl, &amp;res))
+goto last_resort;
++	if (loop &amp;&amp; res.type == RTN_LOCAL) {
++		*spec_dst = FIB_RES_PREFSRC(res);
++		fib_res_put(&amp;res);
++		return 0;
++	}
+if (res.type != RTN_UNICAST) {
+if (res.type != RTN_LOCAL || !accept_local)
+goto e_inval_res;
+diff -urp v2.6.34/linux/net/ipv4/route.c linux/net/ipv4/route.c
+--- v2.6.34/linux/net/ipv4/route.c	2010-05-17 10:49:01.000000000 +0300
++++ linux/net/ipv4/route.c	2010-05-19 00:01:30.000000000 +0300
+@@ -2609,6 +2609,11 @@ static int ip_route_output_slow(struct n
+dev_put(dev_out);
+goto out;	/* Wrong error code */
+}
++		err = -ENETDOWN;
++		if (!(dev_out-&gt;flags&amp;IFF_UP)) {
++			dev_put(dev_out);
++			goto out;
 +		}</p>
-<p>if (ipv4_is_local_multicast(oldflp-&gt;fl4_dst) ||<br />
-oldflp-&gt;fl4_dst == htonl(0xFFFFFFFF)) {<br />
-@@ -2676,10 +2681,41 @@ static int ip_route_output_slow(struct n<br />
+<p>if (ipv4_is_local_multicast(oldflp-&gt;fl4_dst) ||
+oldflp-&gt;fl4_dst == htonl(0xFFFFFFFF)) {
+@@ -2676,10 +2681,41 @@ static int ip_route_output_slow(struct n
 free_res = 1;</p>
 <p></code></p>
-<p><code> if (res.type == RTN_LOCAL) {<br />
--		if (!fl.fl4_src)<br />
--			fl.fl4_src = fl.fl4_dst;<br />
-+		struct in_device *in_dev;<br />
-+		__be32 src;<br />
-+<br />
-if (dev_out)<br />
-dev_put(dev_out);<br />
-+		dev_out = FIB_RES_DEV(res);<br />
-+		in_dev = in_dev_get(dev_out);<br />
-+		src = fl.fl4_src? : FIB_RES_PREFSRC(res);<br />
-+		if (in_dev &amp;&amp; IN_DEV_LOOP(in_dev) &amp;&amp; src) {<br />
-+			struct net_device *dev_src;<br />
-+<br />
-+			in_dev_put(in_dev);<br />
-+			in_dev = NULL;<br />
-+			dev_src = ip_dev_find(net, src);<br />
-+			if (dev_src &amp;&amp; dev_src != dev_out &amp;&amp;<br />
-+			    (in_dev = in_dev_get(dev_src)) &amp;&amp;<br />
-+			    IN_DEV_LOOP(in_dev)) {<br />
-+				in_dev_put(in_dev);<br />
-+				dev_out = dev_src;<br />
-+				fl.fl4_src = src;<br />
-+				fl.oif = dev_out-&gt;ifindex;<br />
-+				res.type = RTN_UNICAST;<br />
-+				if (res.fi) {<br />
-+					fib_info_put(res.fi);<br />
-+					res.fi = NULL;<br />
-+				}<br />
-+				goto make_route;<br />
-+			}<br />
-+			if (dev_src)<br />
-+				dev_put(dev_src);<br />
-+		}<br />
-+		if (in_dev)<br />
-+			in_dev_put(in_dev);<br />
-+		if (!fl.fl4_src)<br />
-+			fl.fl4_src = fl.fl4_dst;<br />
-dev_out = net-&gt;loopback_dev;<br />
-dev_hold(dev_out);<br />
-fl.oif = dev_out-&gt;ifindex;<br />
+<p><code> if (res.type == RTN_LOCAL) {
+-		if (!fl.fl4_src)
+-			fl.fl4_src = fl.fl4_dst;
++		struct in_device *in_dev;
++		__be32 src;
++
+if (dev_out)
+dev_put(dev_out);
++		dev_out = FIB_RES_DEV(res);
++		in_dev = in_dev_get(dev_out);
++		src = fl.fl4_src? : FIB_RES_PREFSRC(res);
++		if (in_dev &amp;&amp; IN_DEV_LOOP(in_dev) &amp;&amp; src) {
++			struct net_device *dev_src;
++
++			in_dev_put(in_dev);
++			in_dev = NULL;
++			dev_src = ip_dev_find(net, src);
++			if (dev_src &amp;&amp; dev_src != dev_out &amp;&amp;
++			    (in_dev = in_dev_get(dev_src)) &amp;&amp;
++			    IN_DEV_LOOP(in_dev)) {
++				in_dev_put(in_dev);
++				dev_out = dev_src;
++				fl.fl4_src = src;
++				fl.oif = dev_out-&gt;ifindex;
++				res.type = RTN_UNICAST;
++				if (res.fi) {
++					fib_info_put(res.fi);
++					res.fi = NULL;
++				}
++				goto make_route;
++			}
++			if (dev_src)
++				dev_put(dev_src);
++		}
++		if (in_dev)
++			in_dev_put(in_dev);
++		if (!fl.fl4_src)
++			fl.fl4_src = fl.fl4_dst;
+dev_out = net-&gt;loopback_dev;
+dev_hold(dev_out);
+fl.oif = dev_out-&gt;ifindex;
 <!-- </code></p> -->
 {% endhighlight %}
 <p>You need to apply the patch to your kernel sources. It's not a good idea to patch the original sources, so get yourself a copy of the sources you wish to patch. It's usually wise to do a dry run, to see if all hunks are successfully applied.</p>
