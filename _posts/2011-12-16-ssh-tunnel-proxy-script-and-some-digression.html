@@ -23,7 +23,8 @@ author:
   last_name: ''
 ---
 <p>Loooong time. I'm sorry about that.... Like Biggie Smalls and Lisa Stansfield would say: "Been around the world, and I, I, I, I can find my baby". That's all quite true actually. Moved to Berlin from my hometown of Madrid, and in the process I had to leave my girl. I'm sorry ladies, we have not split up, but she had to remain home for personal reasons. It is what it is: fucked up. Yeah I know ladies, don't care about my relationship status. I guess I'm just talking out of frustration here, cause this post was supposed to be about surfing via an ssh tunnel. I'm not going to be real technical about it, I'm kind of tired today. The matter of the fact is, that now that I'm in Germany, I sometimes find myself using public WLAN's, or simply using the internet in ways I don't really want ISP's to monitor. SO I decided to go down the 'SSH tunnel' route to secure my communications a little bit. Since I've got a machine back home in madrid, a machine I trust and I feel is quite secure, and with a very decent internet connection, I decided to tunnel through it. I wrote a quick little script (originally for Mac OS X), but it's really quite portable (although you will have to enable the proxy manually in Linux, for example). The script establishes the ssh tunnel, and configures the local SOCKS proxy to use that tunnel we've created. The script can also be used to enable/disable the proxy. It is a little blunt in the activation because it kills all on-going ssh sessions, so use with caution. I'll be back soon with more stuff.</p>
-<p>[bash]<br />
+
+{% highlight bash %}
 #!/bin/bash</p>
 <p>usage() {<br />
  cat &lt;&lt; EOF</p>
@@ -121,4 +122,4 @@ then<br />
 fi<br />
 echo &quot;SOCKS proxy activated succesfully on device: $DEVICE&quot;<br />
 exit 0</p>
-<p>[/bash] </p>
+{% endhighlight %}
