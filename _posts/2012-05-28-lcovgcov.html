@@ -49,20 +49,20 @@ author:
 #          ...
 #          MOD_n/</p>
 <p>usage() {
-        echo &quot;usage: `basename $0` [options]&quot;
-        echo -e &quot;tThis script generates gcov coverage reports.n&quot;
-        echo -e &quot;Options:&quot;
-        echo -e &quot;t-d DIRt: Indicate project dir.nn&quot;
-        echo -e &quot;t-bt: generate baseline info (Call before running tests).&quot;
-        echo -e &quot;t-tt: generate total info (Call after running tests).&quot;
-        echo -e &quot;t-r DIRt: generate HTML reports and place in specified DIR(Call after running tests).nn&quot;
-        echo -e &quot;t-ct: clean all gcov files in project dir.&quot;
-        echo -e &quot;t-qt: Quiet.&quot;
-        echo -e &quot;t-ht: Show this help message.nn&quot;
+        echo "usage: `basename $0` [options]"
+        echo -e "tThis script generates gcov coverage reports.n"
+        echo -e "Options:"
+        echo -e "t-d DIRt: Indicate project dir.nn"
+        echo -e "t-bt: generate baseline info (Call before running tests)."
+        echo -e "t-tt: generate total info (Call after running tests)."
+        echo -e "t-r DIRt: generate HTML reports and place in specified DIR(Call after running tests).nn"
+        echo -e "t-ct: clean all gcov files in project dir."
+        echo -e "t-qt: Quiet."
+        echo -e "t-ht: Show this help message.nn"
 }</p>
 <p>ERRORS=0
-GCDAS=&quot;&quot;
-GCNOS=&quot;&quot;
+GCDAS=""
+GCNOS=""
 CLEAN=
 QUIET=
 BASELINE=
@@ -70,7 +70,7 @@ TOTAL=
 HTML=
 HTMLDIR=
 PJDIR=.
-while getopts &quot;hcbtqr:d:&quot; OPTION
+while getopts "hcbtqr:d:" OPTION
 do
         case $OPTION in
                 h)
@@ -102,49 +102,49 @@ do
                         ;;
         esac
 done</p>
-<p>if [[ -z $BASELINE ]] &amp;&amp; [[ -z $TOTAL ]] &amp;&amp; [[ -z $HTML ]] &amp;&amp; [[ -z $CLEAN ]];
+<p>if [[ -z $BASELINE ]] && [[ -z $TOTAL ]] && [[ -z $HTML ]] && [[ -z $CLEAN ]];
 then
-        echo -e &quot;No appropriate option flag passed!n&quot;
+        echo -e "No appropriate option flag passed!n"
         usage
         exit 1
 fi</p>
 <p>if [[ $BASELINE == 1 ]];
 then
-        echo &quot;Generating baseline info files...&quot;
+        echo "Generating baseline info files..."
         for i in $(find $PJDIR -maxdepth 1 -type d | awk '{ if (NR != 1) { print } }' | sed 's/.///');
         do
-#               for j in $(find $PJDIR/$i -type f -name &quot;*.gcno&quot; -exec dirname {} ;);
+#               for j in $(find $PJDIR/$i -type f -name "*.gcno" -exec dirname {} ;);
 #               do
-#                       GCNOS=&quot; $GCNOS -d $j&quot;
+#                       GCNOS=" $GCNOS -d $j"
 #               done</p>
 <p>                if [[ ! -z $QUIET ]];
                 then
-                        lcov -c -i -d $PJDIR/$i -o ${i}_baseline.info &gt;/dev/null 2&gt;&amp;1
+                        lcov -c -i -d $PJDIR/$i -o ${i}_baseline.info >/dev/null 2>&1
                 else
                         lcov -c -i -d $PJDIR/$i -o ${i}_baseline.info
                 fi</p>
 <p>        done
-        echo &quot;You may now run your regression.&quot;
+        echo "You may now run your regression."
         exit 0;
 fi</p>
 <p>if [[ $TOTAL == 1 ]];
 then
-        echo &quot;Generating test info and gcov files...&quot;
+        echo "Generating test info and gcov files..."
         for i in $(find $PJDIR -maxdepth 1 -type d | awk '{ if (NR != 1) { print } }' | sed 's/.///');
         do
-#               for j in $(find $PJDIR/$i -type f -name &quot;*.gcda&quot; -exec dirname {} ;);
+#               for j in $(find $PJDIR/$i -type f -name "*.gcda" -exec dirname {} ;);
 #               do
-#                       GCDAS=&quot; $GCDAS -d $j&quot;
+#                       GCDAS=" $GCDAS -d $j"
 #               done
                 if [[ ! -z $QUIET ]];
                 then
-                        lcov -c -d $PJDIR/$i -o $PJDIR/${i}_test.info &gt;/dev/null 2&gt;&amp;1
-                        lcov -a $PJDIR/${i}_baseline.info -a $PJDIR/${i}_test.info -o $PJDIR/${i}_total.info &gt;/dev/null 2&gt;&amp;1
+                        lcov -c -d $PJDIR/$i -o $PJDIR/${i}_test.info >/dev/null 2>&1
+                        lcov -a $PJDIR/${i}_baseline.info -a $PJDIR/${i}_test.info -o $PJDIR/${i}_total.info >/dev/null 2>&1
                 else
                         lcov -c -d $PJDIR/$i -o $PJDIR/${i}_test.info
                         lcov -a $PJDIR/${i}_baseline.info -a $PJDIR/${i}_test.info -o $PJDIR/${i}_total.info
                 fi
-                        GCDAS=&quot;&quot;</p>
+                        GCDAS=""</p>
 <p>                if [[ ! -z $? ]];
                 then
                         ERRORS=1
@@ -153,7 +153,7 @@ then
 fi</p>
 <p>if [[ $HTML == 1 ]];
 then
-        echo &quot;Generating html reports...&quot;
+        echo "Generating html reports..."
         for i in $(find $PJDIR -maxdepth 1 -type d | awk '{ if (NR != 1) { print } }' | sed 's/.///');
         do
                 if [[ -e $PJDIR/${i}_total.info ]];
@@ -161,7 +161,7 @@ then
                         mkdir -p $HTMLDIR/${i}
                         if [[ ! -z $QUIET ]];
                         then
-                                genhtml -o $HTMLDIR/${i} $PJDIR/${i}_total.info &gt;/dev/null 2&gt;&amp;1
+                                genhtml -o $HTMLDIR/${i} $PJDIR/${i}_total.info >/dev/null 2>&1
                         else
                                 genhtml -o $HTMLDIR/${i} $PJDIR/${i}_total.info
                         fi</p>
@@ -174,19 +174,19 @@ then
 fi</p>
 <p>if [[ $CLEAN == 1 ]];
 then
-        echo &quot;Removing info files...&quot;
+        echo "Removing info files..."
         rm $PJDIR/*_baseline.info
         rm $PJDIR/*_test.info
         rm $PJDIR/*_total.info
-        echo &quot;Removing gcda files...&quot;
-        find $PJDIR -type f -name &quot;*.gcda&quot; -exec rm -f {} ;
+        echo "Removing gcda files..."
+        find $PJDIR -type f -name "*.gcda" -exec rm -f {} ;
 fi</p>
 <p>if [[ ! -z $ERRORS ]];
 then
-        echo -e &quot;&#92;&#48;33[1mWARNING&#92;&#48;33[0m:tScript completed succesfully but there were non-critical errors.&quot;
+        echo -e "&#92;&#48;33[1mWARNING&#92;&#48;33[0m:tScript completed succesfully but there were non-critical errors."
         if [[ $QUIET == 1 ]];
         then
-                echo -e &quot;ttconsider running the script in verbose (non-quiet) mode.&quot;
+                echo -e "ttconsider running the script in verbose (non-quiet) mode."
         fi
 fi
 {% endhighlight %}
