@@ -83,18 +83,18 @@ int ret;
 struct net *net;</p>
 <p>@@ -255,6 +256,7 @@ int fib_validate_source(__be32 src, __be
 accept_local = IN_DEV_ACCEPT_LOCAL(in_dev);
-if (mark &amp;&amp; !IN_DEV_SRC_VMARK(in_dev))
+if (mark && !IN_DEV_SRC_VMARK(in_dev))
 fl.mark = 0;
 +		loop = IN_DEV_LOOP(in_dev);
 }
 rcu_read_unlock();</p>
 <p>@@ -264,6 +266,11 @@ int fib_validate_source(__be32 src, __be
 net = dev_net(dev);
-if (fib_lookup(net, &amp;fl, &amp;res))
+if (fib_lookup(net, &fl, &res))
 goto last_resort;
-+	if (loop &amp;&amp; res.type == RTN_LOCAL) {
++	if (loop && res.type == RTN_LOCAL) {
 +		*spec_dst = FIB_RES_PREFSRC(res);
-+		fib_res_put(&amp;res);
++		fib_res_put(&res);
 +		return 0;
 +	}
 if (res.type != RTN_UNICAST) {
@@ -108,12 +108,12 @@ dev_put(dev_out);
 goto out;	/* Wrong error code */
 }
 +		err = -ENETDOWN;
-+		if (!(dev_out-&gt;flags&amp;IFF_UP)) {
++		if (!(dev_out->flags&IFF_UP)) {
 +			dev_put(dev_out);
 +			goto out;
 +		}</p>
-<p>if (ipv4_is_local_multicast(oldflp-&gt;fl4_dst) ||
-oldflp-&gt;fl4_dst == htonl(0xFFFFFFFF)) {
+<p>if (ipv4_is_local_multicast(oldflp->fl4_dst) ||
+oldflp->fl4_dst == htonl(0xFFFFFFFF)) {
 @@ -2676,10 +2681,41 @@ static int ip_route_output_slow(struct n
 free_res = 1;</p>
 <p></code></p>
@@ -128,19 +128,19 @@ dev_put(dev_out);
 +		dev_out = FIB_RES_DEV(res);
 +		in_dev = in_dev_get(dev_out);
 +		src = fl.fl4_src? : FIB_RES_PREFSRC(res);
-+		if (in_dev &amp;&amp; IN_DEV_LOOP(in_dev) &amp;&amp; src) {
++		if (in_dev && IN_DEV_LOOP(in_dev) && src) {
 +			struct net_device *dev_src;
 +
 +			in_dev_put(in_dev);
 +			in_dev = NULL;
 +			dev_src = ip_dev_find(net, src);
-+			if (dev_src &amp;&amp; dev_src != dev_out &amp;&amp;
-+			    (in_dev = in_dev_get(dev_src)) &amp;&amp;
++			if (dev_src && dev_src != dev_out &&
++			    (in_dev = in_dev_get(dev_src)) &&
 +			    IN_DEV_LOOP(in_dev)) {
 +				in_dev_put(in_dev);
 +				dev_out = dev_src;
 +				fl.fl4_src = src;
-+				fl.oif = dev_out-&gt;ifindex;
++				fl.oif = dev_out->ifindex;
 +				res.type = RTN_UNICAST;
 +				if (res.fi) {
 +					fib_info_put(res.fi);
@@ -155,9 +155,9 @@ dev_put(dev_out);
 +			in_dev_put(in_dev);
 +		if (!fl.fl4_src)
 +			fl.fl4_src = fl.fl4_dst;
-dev_out = net-&gt;loopback_dev;
+dev_out = net->loopback_dev;
 dev_hold(dev_out);
-fl.oif = dev_out-&gt;ifindex;
+fl.oif = dev_out->ifindex;
 <!-- </code></p> -->
 {% endhighlight %}
 <p>You need to apply the patch to your kernel sources. It's not a good idea to patch the original sources, so get yourself a copy of the sources you wish to patch. It's usually wise to do a dry run, to see if all hunks are successfully applied.</p>
