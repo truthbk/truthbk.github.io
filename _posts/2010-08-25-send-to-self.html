@@ -25,7 +25,7 @@ author:
 <p><!--more--></p>
 <p>At first I thought perhaps disabling the loopback interface, setting up a manual route from one of the interfaces to the other, and ensuring the ARP table had the corresponding MAC/IP pairs for each of the ports would suffice to get the actual packets out on the physical network. But Nay!!!! The kernel always knows the interface is local and sends the packets through itself rather than through the network.</p>
 <p>A little googling led me to <a href="http://www.ssi.bg/~ja/">Julian Anastasov's site</a> and his excellent collection of linux kernel networking patches. One of his works includes a patch to achieve exactly what I needed, send to yourself but through the network. You may not have the patch for the exact version of your kernel, but the code is actually quite straightforward and quite simple to adapt to your kernel version/flavor.<br />
-<!-- <code><br /> -->
+<!-- <br /> -->
 {% highlight diff %}
 diff -urp v2.6.34/linux/Documentation/networking/ip-sysctl.txt linux/Documentation/networking/ip-sysctl.txt
 --- v2.6.34/linux/Documentation/networking/ip-sysctl.txt	2010-05-17 10:48:46.000000000 +0300
@@ -55,8 +55,8 @@ IPV4_DEVCONF_ARP_ANNOUNCE,
 IPV4_DEVCONF_ARP_IGNORE,
 IPV4_DEVCONF_PROMOTE_SECONDARIES,
 @@ -137,6 +138,7 @@ static inline void ipv4_devconf_setall(s
-IN_DEV_ORCONF((in_dev), ACCEPT_REDIRECTS)))</p>
-<p>#define IN_DEV_ARPFILTER(in_dev)	IN_DEV_ORCONF((in_dev), ARPFILTER)
+IN_DEV_ORCONF((in_dev), ACCEPT_REDIRECTS)))
+#define IN_DEV_ARPFILTER(in_dev)	IN_DEV_ORCONF((in_dev), ARPFILTER)
 +#define IN_DEV_LOOP(in_dev)		IN_DEV_CONF_GET(in_dev, LOOP)
 #define IN_DEV_ARP_ANNOUNCE(in_dev)	IN_DEV_MAXCONF((in_dev), ARP_ANNOUNCE)
 #define IN_DEV_ARP_IGNORE(in_dev)	IN_DEV_MAXCONF((in_dev), ARP_IGNORE)
@@ -75,20 +75,20 @@ DEVINET_SYSCTL_RW_ENTRY(ARP_ACCEPT, "arp_accept"),
 diff -urp v2.6.34/linux/net/ipv4/fib_frontend.c linux/net/ipv4/fib_frontend.c
 --- v2.6.34/linux/net/ipv4/fib_frontend.c	2010-05-17 10:49:01.000000000 +0300
 +++ linux/net/ipv4/fib_frontend.c	2010-05-19 00:01:30.000000000 +0300
-@@ -243,6 +243,7 @@ int fib_validate_source(__be32 src, __be</p>
-<p>struct fib_result res;
+@@ -243,6 +243,7 @@ int fib_validate_source(__be32 src, __be
+struct fib_result res;
 int no_addr, rpf, accept_local;
 +	int loop = 0;
 int ret;
-struct net *net;</p>
-<p>@@ -255,6 +256,7 @@ int fib_validate_source(__be32 src, __be
+struct net *net;
+@@ -255,6 +256,7 @@ int fib_validate_source(__be32 src, __be
 accept_local = IN_DEV_ACCEPT_LOCAL(in_dev);
 if (mark && !IN_DEV_SRC_VMARK(in_dev))
 fl.mark = 0;
 +		loop = IN_DEV_LOOP(in_dev);
 }
-rcu_read_unlock();</p>
-<p>@@ -264,6 +266,11 @@ int fib_validate_source(__be32 src, __be
+rcu_read_unlock();
+@@ -264,6 +266,11 @@ int fib_validate_source(__be32 src, __be
 net = dev_net(dev);
 if (fib_lookup(net, &fl, &res))
 goto last_resort;
@@ -111,13 +111,13 @@ goto out;	/* Wrong error code */
 +		if (!(dev_out->flags&IFF_UP)) {
 +			dev_put(dev_out);
 +			goto out;
-+		}</p>
-<p>if (ipv4_is_local_multicast(oldflp->fl4_dst) ||
++		}
+if (ipv4_is_local_multicast(oldflp->fl4_dst) ||
 oldflp->fl4_dst == htonl(0xFFFFFFFF)) {
 @@ -2676,10 +2681,41 @@ static int ip_route_output_slow(struct n
-free_res = 1;</p>
-<p></code></p>
-<p><code> if (res.type == RTN_LOCAL) {
+free_res = 1;
+
+ if (res.type == RTN_LOCAL) {
 -		if (!fl.fl4_src)
 -			fl.fl4_src = fl.fl4_dst;
 +		struct in_device *in_dev;
@@ -158,7 +158,6 @@ dev_put(dev_out);
 dev_out = net->loopback_dev;
 dev_hold(dev_out);
 fl.oif = dev_out->ifindex;
-<!-- </code></p> -->
 {% endhighlight %}
 <p>You need to apply the patch to your kernel sources. It's not a good idea to patch the original sources, so get yourself a copy of the sources you wish to patch. It's usually wise to do a dry run, to see if all hunks are successfully applied.</p>
 <p><code><br />
