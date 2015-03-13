@@ -22,36 +22,36 @@ author:
   last_name: ''
 ---
 <p>It's been a looooong ass time, my bad, been kind of busy lately.... ok I admit it, I've also been a little lately. Anyway, this is really security related in the sense that this is surely how rootkits intercept system calls right now on 2.6 kernels. As most of you probably already know, the system call table was no longer exported as of kernel 2.6. I'm not entirely sure what the rationale behind it was, but it definitely made system call interception a little more complicated. Back in the days of the 2.4 kernel, all you had to do from an LKM to intecept a system call was declaring:<br />
-[c]<br />
-extern void * sys_call_table[];<br />
-[/c]<br />
+{% highlight c %}
+extern void * sys_call_table[];
+{% endhighlight %}
 and since sys_call_table[] was in fact exported, that was it, as long as you knew the index to the system call you were intercepting (easily <em>greppable</em> from include/asm-generic/unistd.h (on 2.6 kernels, can't remember if the syscalls were setup there on 2.4, but you could easily check up on <a href="http://lxr.linux.no">LXR</a>). But you can't do that anymore, sys_call_table is no longer exported. But don't you worry! There are still a couple of ways to figure out where the system call table. For starters, you can actually get the value straight out from System.map, the problem with this approach is that it only really helps cause it will provide the the syscall table for your LKM at compile time. Problem is, if you can't find the System.map, you're stuck without a valid start address for the system call table. Anyway, the way to get that address is the following:<br />
-[bash]<br />
-grep ' sys_call_table' /usr/src/linux/System.map | sed “s/^(.*) (.* sys_call_table)/0x1/”<br />
-[/bash]<br />
+{% highlight bash %}
+grep ' sys_call_table' /usr/src/linux/System.map | sed “s/^(.*) (.* sys_call_table)/0x1/”
+{% endhighlight %}
 you can then use that value to define a preprocessor directive in the Makefile of your LKM as explained <a href="http://blinkeye.ch/dokuwiki/doku.php/projects/lkm">here</a>. And that's definitely a simple approach. But we can do better. How about getting the system call table address dynamically? It might look like an ugly hack, but bruteforcing the address isn't that bad. You create a simple bruteforce routine during module's init function, and extract the address from there. Why can we bruteforce the system call table's address? Well because an LKM is in kernelspace, and as such has pretty much free access to the kernel's memory where the system call table lives. This is how:<br />
-[c]<br />
-#define MAX_TRY 0x400 /* 1024 (0x400) should be enough */</p>
-<p>sys_call_ptr_t * bruteforce_syscall_table(void)<br />
-{<br />
-	int = 0, found = 0;<br />
-	/* system_utsname is typically before the system call table... */<br />
-	sys_call_ptr_t * mysyscalltable = &amp;system_utsname; </p>
-<p>	for(i = 0 ; i&lt;MAX_TRY &amp;&amp; !found ; i++)<br />
-	{<br />
-		if(mysyscalltable[__NR_OPEN] = =&amp;sys_open)<br />
-		{<br />
-			found = 1;<br />
-		} else<br />
-		{<br />
-			mysyscalltable++;<br />
-		}<br />
-	}</p>
-<p>	if(!found)<br />
-		return NULL;</p>
-<p>	return mysyscalltable;<br />
-}<br />
-[/c]<br />
+{% highlight c %}
+#define MAX_TRY 0x400 /* 1024 (0x400) should be enough */
+sys_call_ptr_t * bruteforce_syscall_table(void)
+{
+	int = 0, found = 0;
+	/* system_utsname is typically before the system call table... */
+	sys_call_ptr_t * mysyscalltable = &system_utsname; 
+	for(i = 0 ; i<MAX_TRY && !found ; i++)
+	{
+		if(mysyscalltable[__NR_OPEN] = =&sys_open)
+		{
+			found = 1;
+		} else
+		{
+			mysyscalltable++;
+		}
+	}
+	if(!found)
+		return NULL;
+	return mysyscalltable;
+}
+{% endhighlight %}
 That's basically it. The only problem with this is that stuff may move around in the kernel, so the assumption that system_utsname will always existe before the system call table isn't rock rock solid, so you may end up not finding the system call table at all if it's moved to an address beyond the system call table. Another option at runtime (this one is actually failsafe) is combining both approaches, opening the System.map from within an LKM (any kernel hacker would tell you this is horrible, but then again intercepting system calls isn't what you'd call best practice anyway) parsing the file and extracting the address from there. I don't really want to do that right now because I can't really remember all the right kernel calls for file manipulation from kernel space, but it shouldn't prove too complicated at all.</p>
 <p>Anyway, don't go building rootkits to mess other people's systems :-)</p>
 <p>All of the info provided here comes from the brilliant <a href="http://memset.wordpress.com/2011/01/20/syscall-hijacking-dynamically-obtain-syscall-table-address-kernel-2-6-x/">memset blog</a> and <a href="http://commons.oreilly.com/wiki/index.php/Network_Security_Tools/Modifying_and_Hacking_Security_Tools/Fun_with_Linux_Kernel_Modules">O'Reilly's wiki</a> (that's a lot of apostrophes :-) ). It has also been actively discussed on <a href="http://kerneltrap.org/">kernel trap</a>, can't find the exact threads right now, but it's all in there. I have not innovated at all, and the purpose of this article is to share the work of others which has helped me intercept system calls and keep good record of what was done (for legit purposes, believe me!).</p>
