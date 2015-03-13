@@ -25,7 +25,7 @@ last_name: ''
 <p>The most relevant stuff here is the use of urllib and urllib2, which allow us to encode parameters for an HTTP POST request, and perform the actual page requests. The whole login process also uses a cookie, which made us have to use the cookielib to set up a cookiejar. Before you login, you are given a cookie, which you need to store for the process to succeed. Once you have that sorted, you can submit that form together with the right parameters (including a hidden one you need to parse from the HTML output). I figured out my explanation isn't too clarifying, so without further ado, here's the script:<br />
 <br /> </p>
 
-<code>
+{% highlight python %}
 #!/usr/bin/python
 import urllib
 import urllib2
@@ -127,4 +127,4 @@ def main(argv):
 if __name__ == "__main__":
 	main(sys.argv[1:])
 
-</code>
+	{% endhighlight %}
