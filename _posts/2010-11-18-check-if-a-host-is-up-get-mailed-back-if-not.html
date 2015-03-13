@@ -20,124 +20,124 @@ author:
   first_name: ''
   last_name: ''
 ---
-<p>I was well aware that my ignorance of python was nothing to be proud of, so I've set my mind to actually get a little more proficient in it. I'm basically starting off by writing some scripts I wanted to get ready and rather than doing then in good old bash scripting, I decided to head right into python territory. I did make a bold choice by developing these scripts for python 3.1, rather than the more widespread 2.7. I figured it made sense to learn the latest release, I mean python3k will eventually be the standard I guess. Either way, the differences are quite minuscule, so there's nothing to worry about out, it's quite straightforward to migrate a script back and forth. Fortunately the python learning curve isn't too steep, or so I've heard.... and my early experience with it seems to corroborate this. If you know some scripting, Java/C++.... writing decent modular python code seems quite accessible. Now don't get me wrong, there may well be a lot of <em>crap</em> in these scripts, bear in mind I am a python newbie :)<br />
-<!--more--></p>
+<p>I was well aware that my ignorance of python was nothing to be proud of, so I've set my mind to actually get a little more proficient in it. I'm basically starting off by writing some scripts I wanted to get ready and rather than doing then in good old bash scripting, I decided to head right into python territory. I did make a bold choice by developing these scripts for python 3.1, rather than the more widespread 2.7. I figured it made sense to learn the latest release, I mean python3k will eventually be the standard I guess. Either way, the differences are quite minuscule, so there's nothing to worry about out, it's quite straightforward to migrate a script back and forth. Fortunately the python learning curve isn't too steep, or so I've heard.... and my early experience with it seems to corroborate this. If you know some scripting, Java/C++.... writing decent modular python code seems quite accessible. Now don't get me wrong, there may well be a lot of <em>crap</em> in these scripts, bear in mind I am a python newbie :)<br /></p>
 <p>Anyway, I wanted to write a script which would enable me to check if a host was up, and if that wasn't the case, it would send me an email to inform of the <em>down</em> status of the machine. The script isn't completely finished, because I would also like to check if the webserver is up, rather than the actual machine. Currently we just ping a url, and parse the output to decide if the machine is up or not. I will soon update the script to include an option, which will check (using the python libraries available for this task, we could also use wget, but there's no reason to do so). This way we will also know the actual webserver daemon status.</p>
 <h3>Main script : <em>is_up.py</em></h3>
-<p>[python]<br />
-#!/usr/bin/env python<br />
-#<br />
-# Script to check if supplied argument url is up.<br />
-# If not, an email to the supplied address is sent.</p>
-<p>import getopt<br />
-import re<br />
-import sys<br />
-from email.mime.text import MIMEText<br />
-from my_shellcmd import ShellCmdClass<br />
-from smtp_wrapper import MyMailer</p>
-<p>def usage():<br />
-	print('usage:n%s [-u url] [-m email] [-s smtpserver] [-p smtpport] [-f fromemail]n' % (sys.argv[0]))</p>
-<p>def main(argv):<br />
-	email = &quot;&quot;<br />
-	url = &quot;&quot;<br />
-	smtpserv = &quot;&quot;<br />
-	smtpport = &quot;&quot;<br />
-	fromemail = &quot;&quot;<br />
-	smtpuser=&quot;youruser@gmail.com&quot;<br />
-	smtppass=&quot;yourpasswd&quot;</p>
-<p>	try:<br />
-		opts, args = getopt.getopt(argv, &quot;hu:m:s:f:p:&quot;, [&quot;help&quot;, &quot;url=&quot;,&quot;mail=&quot;,&quot;smtp=&quot;,&quot;frommail=&quot;,&quot;port=&quot;])<br />
-	except getopt.GetoptError:<br />
-		usage()<br />
-		exit(2)<br />
-	for opt, arg in opts:<br />
-		if opt in (&quot;-h&quot;, &quot;--help&quot;):<br />
-			usage()<br />
-			exit(2)<br />
-		elif opt in (&quot;-u&quot;, &quot;--url&quot;):<br />
-			url = arg<br />
-		elif opt in (&quot;-m&quot;, &quot;--mail&quot;):<br />
-			email = arg<br />
-		elif opt in (&quot;-s&quot;, &quot;--smtp&quot;):<br />
-			smtpserv = arg<br />
-		elif opt in (&quot;-p&quot;, &quot;--port&quot;):<br />
-			smtpport = int(arg)<br />
-		elif opt in (&quot;-f&quot;, &quot;--frommail&quot;):<br />
-			fromemail = arg</p>
-<p>	#vars should be verified to be non-empty and correctly entered<br />
-	#ie.	addr@mail.com for emails<br />
-	#	smtp.someserver.com for hosts<br />
-	#<br />
-	#	xxx.xxx.xxx.xxx<br />
-	#	some.url.com	for urls</p>
-<p>	my_mailer = MyMailer(smtpserv, smtpport, smtpuser, smtppass, fromemail, email)<br />
-	ping_cmd = ShellCmdClass([&quot;ping&quot;, &quot;-c4&quot;, url]);<br />
-	ping_out = ping_cmd.runcmd_chkoutput()<br />
-	ping_out_str = ping_out.decode(&quot;utf-8&quot;)</p>
-<p>	m = re.search('([0-9] received)',ping_out_str)<br />
-	stats = re.split('s',m.group(0))</p>
-<p>	if int(stats[0]) == 0:<br />
-		msg = MIMEText('The server at URL: %s, appears to be down!nPlease notify the webmaster.n' % (url) )<br />
-		msg['Subject']='%s is Down' % (url)<br />
-		msg['From']=fromemail<br />
-		msg['To']=email<br />
-		my_mailer.send_message(msg.as_string())</p>
-<p>if __name__ == &quot;__main__&quot;:<br />
-	main(sys.argv[1:])<br />
-[/python]</p>
+{% highlight python %}
+#!/usr/bin/env python
+#
+# Script to check if supplied argument url is up.
+# If not, an email to the supplied address is sent.
+import getopt
+import re
+import sys
+from email.mime.text import MIMEText
+from my_shellcmd import ShellCmdClass
+from smtp_wrapper import MyMailer
+def usage():
+	print('usage:n%s [-u url] [-m email] [-s smtpserver] [-p smtpport] [-f fromemail]n' % (sys.argv[0]))
+def main(argv):
+	email = ""
+	url = ""
+	smtpserv = ""
+	smtpport = ""
+	fromemail = ""
+	smtpuser="youruser@gmail.com"
+	smtppass="yourpasswd"
+	try:
+		opts, args = getopt.getopt(argv, "hu:m:s:f:p:", ["help", "url=","mail=","smtp=","frommail=","port="])
+	except getopt.GetoptError:
+		usage()
+		exit(2)
+	for opt, arg in opts:
+		if opt in ("-h", "--help"):
+			usage()
+			exit(2)
+		elif opt in ("-u", "--url"):
+			url = arg
+		elif opt in ("-m", "--mail"):
+			email = arg
+		elif opt in ("-s", "--smtp"):
+			smtpserv = arg
+		elif opt in ("-p", "--port"):
+			smtpport = int(arg)
+		elif opt in ("-f", "--frommail"):
+			fromemail = arg
+	#vars should be verified to be non-empty and correctly entered
+	#ie.	addr@mail.com for emails
+	#	smtp.someserver.com for hosts
+	#
+	#	xxx.xxx.xxx.xxx
+	#	some.url.com	for urls
+	my_mailer = MyMailer(smtpserv, smtpport, smtpuser, smtppass, fromemail, email)
+	ping_cmd = ShellCmdClass(["ping", "-c4", url]);
+	ping_out = ping_cmd.runcmd_chkoutput()
+	ping_out_str = ping_out.decode("utf-8")
+	m = re.search('([0-9] received)',ping_out_str)
+	stats = re.split('s',m.group(0))
+	if int(stats[0]) == 0:
+		msg = MIMEText('The server at URL: %s, appears to be down!nPlease notify the webmaster.n' % (url) )
+		msg['Subject']='%s is Down' % (url)
+		msg['From']=fromemail
+		msg['To']=email
+		my_mailer.send_message(msg.as_string())
+if __name__ == "__main__":
+	main(sys.argv[1:])
+{% endhighlight %}
+
 <h3>SMTP Mail Wrapper : <em>smtp_wrapper.py</em></h3>
-<p>[python]<br />
-#!/usr/bin/env python<br />
-#<br />
-# Simple reusable class to wrap smtp python functions</p>
-<p>import smtplib</p>
-<p>class MyMailer:<br />
-#	Name = &quot;MyMailer&quot;</p>
-<p>	def __init__(self, smtpserver=None, smtpport=None, smtpuser=None, smtppass=None, from_address=None, to_address=None):<br />
-		self.toaddr= to_address<br />
-		self.fromaddr = from_address<br />
-		self.authuser = smtpuser<br />
-		self.authpasswd = smtppass<br />
-		self.server = smtplib.SMTP(smtpserver, smtpport)</p>
-<p>	def set_fromaddr(self, fromaddr):<br />
-		self.fromaddr = fromaddr</p>
-<p>	def set_toaddr(self, toaddr):<br />
-		self.toaddr = toaddr</p>
-<p>	def set_smtpserver(self, smtpserver):<br />
-		self.smtpserver = smtpserver<br />
-		self.server = server.smtplib.SMTP(self.smtpserver, self.smtpport)</p>
-<p>	def set_smtpport(self, smtpport):<br />
-		self.smtpport = smtpport<br />
-		self.server = server.smtplib.SMTP(self.smtpserver, self.smtpport)</p>
-<p>	def login(self):<br />
-		self.server.ehlo()<br />
-		self.server.starttls()<br />
-		self.server.login(self.authuser,self.authpasswd)</p>
-<p>	def send_message(self, msg):<br />
-		self.login()<br />
-		self.server.sendmail(self.fromaddr, self.toaddr,msg)<br />
-		self.server.quit()</p>
-<p>[/python]</p>
+{% highlight python %}
+#!/usr/bin/env python
+#
+# Simple reusable class to wrap smtp python functions
+import smtplib
+class MyMailer:
+#	Name = "MyMailer"
+	def __init__(self, smtpserver=None, smtpport=None, smtpuser=None, smtppass=None, from_address=None, to_address=None):
+		self.toaddr= to_address
+		self.fromaddr = from_address
+		self.authuser = smtpuser
+		self.authpasswd = smtppass
+		self.server = smtplib.SMTP(smtpserver, smtpport)
+	def set_fromaddr(self, fromaddr):
+		self.fromaddr = fromaddr
+	def set_toaddr(self, toaddr):
+		self.toaddr = toaddr
+	def set_smtpserver(self, smtpserver):
+		self.smtpserver = smtpserver
+		self.server = server.smtplib.SMTP(self.smtpserver, self.smtpport)
+	def set_smtpport(self, smtpport):
+		self.smtpport = smtpport
+		self.server = server.smtplib.SMTP(self.smtpserver, self.smtpport)
+	def login(self):
+		self.server.ehlo()
+		self.server.starttls()
+		self.server.login(self.authuser,self.authpasswd)
+	def send_message(self, msg):
+		self.login()
+		self.server.sendmail(self.fromaddr, self.toaddr,msg)
+		self.server.quit()
+{% endhighlight %}
 <h3>Shell Command Wrapper : <em>my_shellcmd.py</em></h3>
-<p>[python]<br />
-#!/usr/bin/env python<br />
-#<br />
-# Simple reusable class to execute shell commands.</p>
-<p>import subprocess<br />
-import os<br />
-import smtplib</p>
-<p>from subprocess import CalledProcessError</p>
-<p>class ShellCmdClass:</p>
-<p>	Name = &quot;ShellCmdClass&quot;</p>
-<p>	def __init__(self, the_cmd):<br />
-		self.cmd = the_cmd</p>
-<p>	def runcmd_chkoutput(self):<br />
-		output=&quot;&quot;<br />
-		try:<br />
-			return subprocess.check_output(self.cmd)<br />
-		except subprocess.CalledProcessError as exc:<br />
-			return exc.output<br />
-	def runcmd_getoutput(self):<br />
-		return subprocess.check_output(self.cmd)</p>
-<p>[/python]</p>
+{% highlight python %}
+#!/usr/bin/env python
+#
+# Simple reusable class to execute shell commands.
+import subprocess
+import os
+import smtplib
+from subprocess import CalledProcessError
+class ShellCmdClass:
+	Name = "ShellCmdClass"
+	def __init__(self, the_cmd):
+		self.cmd = the_cmd
+	def runcmd_chkoutput(self):
+		output=""
+		try:
+			return subprocess.check_output(self.cmd)
+		except subprocess.CalledProcessError as exc:
+			return exc.output
+	def runcmd_getoutput(self):
+		return subprocess.check_output(self.cmd)
+{% endhighlight %}
 <p>As you can see I've tried to keep my code as modular as possible. Hopefully this will make me write less code eventually, when I find myself reusing some of these python classes. I know, it's not necessary to wrap these things, the python smtplib is actually really straightforward and very intuitive, probably more so than my own wrapper, but I must admit that sometimes when you develop a wrapper you end up having an object which you are more familiar with, as well as breaking down the elements of the actual library you're using, thus gaining a better understanding. As I said, I am using this as an excercise to learn python, so the more code I wrote, and attempting to use good-practice rules, the better. If there's anything horrible here, please let me know! :P</p>
