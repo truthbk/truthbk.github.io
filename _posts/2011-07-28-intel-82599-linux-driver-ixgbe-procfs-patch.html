@@ -31,515 +31,516 @@ author:
 <p>In consequence, I wasn't really happy with my previous patch, so I decided to add the procfs facilities for the ixgbe driver, and added the PAP register interface to it. Adding future, additional, elements to the driver's procfs should now be rather straight straight-forward; just replicate what I've done for PAP. </p>
 <p>Drumroll please! Here is the patch.... ;)</p>
 <p><!--more--></p>
-<p>[diff]<br />
-diff -uNrp ixgbe-3.3.9//src/Makefile ixgbe-3.3.9-procfs//src/Makefile<br />
---- ixgbe-3.3.9//src/Makefile	2011-04-20 01:06:31.000000000 +0200<br />
-+++ ixgbe-3.3.9-procfs//src/Makefile	2011-07-19 14:32:10.771000008 +0200<br />
-@@ -36,11 +36,13 @@ CFILES = ixgbe_main.c ixgbe_common.c ixg<br />
-          ixgbe_sriov.c ixgbe_mbx.c<br />
-          ixgbe_dcb.c ixgbe_dcb_82598.c<br />
-          ixgbe_dcb_82599.c<br />
--         ixgbe_phy.c<br />
-+         ixgbe_phy.c<br />
-+	 ixgbe_procfs.c<br />
- HFILES = ixgbe.h ixgbe_common.h ixgbe_api.h ixgbe_osdep.h kcompat.h<br />
-          ixgbe_sriov.h ixgbe_mbx.h<br />
-          ixgbe_dcb.h<br />
--         ixgbe_phy.h<br />
-+         ixgbe_phy.h<br />
-+	 ixgbe_procfs.h<br />
- ifeq (,$(BUILD_KERNEL))<br />
- BUILD_KERNEL=$(shell uname -r)<br />
- endif<br />
-@@ -146,6 +148,7 @@ ifeq ($(ARCH),ppc64)<br />
- endif</p>
-<p> # extra flags for module builds<br />
-+EXTRA_CFLAGS += -DPAP_IOCTL<br />
- EXTRA_CFLAGS += -DDRIVER_$(shell echo $(DRIVER_NAME) | tr '[a-z]' '[A-Z]')<br />
- EXTRA_CFLAGS += -DDRIVER_NAME=$(DRIVER_NAME)<br />
- EXTRA_CFLAGS += -DDRIVER_NAME_CAPS=$(shell echo $(DRIVER_NAME) | tr '[a-z]' '[A-Z]')<br />
-diff -uNrp ixgbe-3.3.9//src/ixgbe_main.c ixgbe-3.3.9-procfs//src/ixgbe_main.c<br />
---- ixgbe-3.3.9//src/ixgbe_main.c	2011-04-20 01:06:31.000000000 +0200<br />
-+++ ixgbe-3.3.9-procfs//src/ixgbe_main.c	2011-07-19 14:31:45.616000008 +0200<br />
-@@ -53,10 +53,15 @@<br />
- #include &lt;linux/ethtool.h&gt;<br />
- #endif</p>
-<p>+#ifdef PAP_IOCTL<br />
-+#include &quot;ixgbe_procfs.h&quot;<br />
-+#endif<br />
-+<br />
- #include &quot;ixgbe.h&quot;</p>
-<p> #include &quot;ixgbe_sriov.h&quot;</p>
-<p>+<br />
- char ixgbe_driver_name[] = &quot;ixgbe&quot;;<br />
- static const char ixgbe_driver_string[] =<br />
- 			      &quot;Intel(R) 10 Gigabit PCI Express Network Driver&quot;;<br />
-@@ -68,6 +73,7 @@ static const char ixgbe_driver_string[]<br />
- #define DRIVERNAPI &quot;-NAPI&quot;<br />
- #endif</p>
-<p>+<br />
- #define FPGA</p>
-<p> #define VMDQ_TAG<br />
-@@ -132,6 +138,14 @@ MODULE_DESCRIPTION(&quot;Intel(R) 10 Gigabit<br />
- MODULE_LICENSE(&quot;GPL&quot;);<br />
- MODULE_VERSION(DRV_VERSION);</p>
-<p>+#ifdef CONFIG_PROC_FS<br />
-+extern const struct file_operations pap_fops;<br />
-+extern struct list_head procfs_list;<br />
-+struct proc_dir_entry *ixgbe_proc_dir = NULL;<br />
-+struct proc_dir_entry *ixgbe_proc_pap = NULL;<br />
-+#endif<br />
-+<br />
-+<br />
- #define DEFAULT_DEBUG_LEVEL_SHIFT 3</p>
-<p> static inline void ixgbe_disable_sriov(struct ixgbe_adapter *adapter)<br />
-@@ -7837,9 +7851,14 @@ static int ixgbe_del_sanmac_netdev(struc<br />
-  **/<br />
- static int ixgbe_ioctl(struct net_device *netdev, struct ifreq *ifr, int cmd)<br />
- {<br />
-+	struct ixgbe_adapter *adapter = netdev_priv(netdev);<br />
- 	switch (cmd) {<br />
- 	case SIOCETHTOOL:<br />
- 		return ethtool_ioctl(ifr);<br />
-+#ifdef PAP_IOCTL<br />
-+	case SIOCDEVPRIVATE:<br />
-+		return pap_rate_adjust(adapter, ifr);<br />
-+#endif<br />
- 	default:<br />
- 		return -EOPNOTSUPP;<br />
- 	}<br />
-@@ -8063,6 +8082,8 @@ static int __devinit ixgbe_probe(struct<br />
- 				 const struct pci_device_id *ent)<br />
- {<br />
- 	struct net_device *netdev;<br />
-+	struct ixgbe_adapter_procfs *ixgbe_procfs_aux = NULL;<br />
-+	struct ixgbe_adapter_procfs_dir *ixgbe_procfs_dir_aux = NULL;<br />
- 	struct ixgbe_adapter *adapter = NULL;<br />
- 	struct ixgbe_hw *hw = NULL;<br />
- 	static int cards_found;<br />
-@@ -8175,6 +8196,7 @@ static int __devinit ixgbe_probe(struct<br />
- 	e_info(tx_err, &quot;my (original) node was: %dn&quot;, dev_to_node(&amp;pdev-&gt;dev));<br />
- #endif /* HAVE_DEVICE_NUMA_NODE */</p>
-<p>+<br />
- #ifdef HAVE_PCI_ERS<br />
- 	/*<br />
- 	 * call save state here in standalone driver because it relies on<br />
-@@ -8569,6 +8591,48 @@ no_info_string:<br />
- 	ixgbe_add_sanmac_netdev(netdev);</p>
-<p> #endif /* (HAVE_NETDEV_STORAGE_ADDRESS) &amp;&amp; (NETDEV_HW_ADDR_T_SAN) */<br />
-+<br />
-+#ifdef CONFIG_PROC_FS<br />
-+<br />
-+	if(!(ixgbe_procfs_dir_aux = kmalloc(sizeof(struct ixgbe_adapter_procfs_dir), GFP_KERNEL)))<br />
-+		goto end_procfs;<br />
-+<br />
-+	//ixgbe_procfs_dir_aux-&gt;proc_entry = proc_mkdir_mode(netdev-&gt;name, 0644, ixgbe_proc_dir);<br />
-+	ixgbe_procfs_dir_aux-&gt;proc_entry = proc_mkdir(netdev-&gt;name, ixgbe_proc_dir);<br />
-+	INIT_LIST_HEAD(&amp;ixgbe_procfs_dir_aux-&gt;procfs_dir_node);<br />
-+	INIT_LIST_HEAD(&amp;ixgbe_procfs_dir_aux-&gt;procfs_nodes_list);<br />
-+	list_add(&amp;ixgbe_procfs_dir_aux-&gt;procfs_dir_node, &amp;procfs_list);<br />
-+<br />
-+	/* if this fails how should we behave? Ugly goto for now.... */<br />
-+	if(!(ixgbe_procfs_aux = kmalloc(sizeof(struct ixgbe_adapter_procfs), GFP_KERNEL)))<br />
-+		goto end_procfs;<br />
-+<br />
-+	/* Now lets create the procfs PAP entry node */<br />
-+	ixgbe_procfs_aux-&gt;proc_entry = create_proc_entry(&quot;pap&quot;, 0644, ixgbe_procfs_dir_aux-&gt;proc_entry);<br />
-+	ixgbe_procfs_aux-&gt;nic_adapter = adapter;<br />
-+	ixgbe_procfs_aux-&gt;proc_entry-&gt;data = ixgbe_procfs_aux;<br />
-+<br />
-+	/*  ixgbe_procfs_aux-&gt;proc_entry-&gt;data = ixgbe_procfs_aux;<br />
-+	 *  points to itself.<br />
-+	 *<br />
-+	 *  we can use container_of instead in the callback.<br />
-+	 *<br />
-+	 *  */<br />
-+	ixgbe_procfs_aux-&gt;proc_entry-&gt;read_proc = ixgbe_procfs_read;<br />
-+	ixgbe_procfs_aux-&gt;proc_entry-&gt;write_proc = ixgbe_procfs_write;<br />
-+<br />
-+	/* Default values... */<br />
-+	ixgbe_procfs_aux-&gt;pap = 10;<br />
-+<br />
-+	INIT_LIST_HEAD(&amp;ixgbe_procfs_aux-&gt;procfs_node);<br />
-+	list_add(&amp;ixgbe_procfs_aux-&gt;procfs_node, &amp;ixgbe_procfs_dir_aux-&gt;procfs_nodes_list);<br />
-+<br />
-+	/* If you need additional procfs entries, add them similarly here... */<br />
-+<br />
-+end_procfs:<br />
-+#endif<br />
-+<br />
-+<br />
- 	e_info(probe, &quot;Intel(R) 10 Gigabit Network Connectionn&quot;);<br />
- 	cards_found++;<br />
- 	return 0;<br />
-@@ -8800,6 +8864,18 @@ static int __init ixgbe_init_module(void<br />
- 	dca_register_notify(&amp;dca_notifier);</p>
-<p> #endif<br />
-+<br />
-+#ifdef CONFIG_PROC_FS<br />
-+<br />
-+	ixgbe_proc_dir = proc_mkdir(ixgbe_procfs_dirname, NULL);<br />
-+	if (!ixgbe_proc_dir)<br />
-+		return -ENOMEM;<br />
-+	/* General NIC options such as Pause and Pace, for each interface (port),<br />
-+	 * will be &quot;set up&quot; during the probe phase. They will be added to this list...<br />
-+	 * */<br />
-+	INIT_LIST_HEAD(&amp;procfs_list);<br />
-+#endif<br />
-+<br />
- 	ret = pci_register_driver(&amp;ixgbe_driver);<br />
- 	return ret;<br />
- }<br />
-@@ -8814,13 +8890,46 @@ module_init(ixgbe_init_module);<br />
-  **/<br />
- static void __exit ixgbe_exit_module(void)<br />
- {<br />
-+#ifdef CONFIG_PROC_FS<br />
-+	struct ixgbe_adapter_procfs_dir * procfs_dir_aux;<br />
-+	struct ixgbe_adapter_procfs * procfs_aux;<br />
-+<br />
-+	struct list_head *prev, *curr;<br />
-+	struct list_head *prev2, *curr2;<br />
-+#endif<br />
-+<br />
- #if defined(CONFIG_DCA) || defined(CONFIG_DCA_MODULE)<br />
- 	dca_unregister_notify(&amp;dca_notifier);<br />
- #endif<br />
- #ifndef CONFIG_DCB<br />
- 	ixgbe_dcb_netlink_unregister();<br />
- #endif<br />
-+<br />
- 	pci_unregister_driver(&amp;ixgbe_driver);<br />
-+#ifdef CONFIG_PROC_FS<br />
-+	/* Cleanup the remaining procfs stuff...<br />
-+	 *<br />
-+	 * Loop over procfs_list freeing everything.<br />
-+	 * */<br />
-+	list_for_each_safe(curr, prev, &amp;procfs_list)<br />
-+	{<br />
-+		procfs_dir_aux = list_entry(curr, struct ixgbe_adapter_procfs_dir, procfs_dir_node);<br />
-+		list_for_each_safe(curr2, prev2, &amp;procfs_dir_aux-&gt;procfs_nodes_list)<br />
-+		{<br />
-+			procfs_aux = list_entry(curr2, struct ixgbe_adapter_procfs, procfs_node);<br />
-+			remove_proc_entry(procfs_aux-&gt;proc_entry-&gt;name, procfs_aux-&gt;proc_entry-&gt;parent);<br />
-+			list_del(curr2);<br />
-+			kfree(procfs_aux);<br />
-+		}<br />
-+		remove_proc_entry(procfs_dir_aux-&gt;proc_entry-&gt;name, procfs_dir_aux-&gt;proc_entry-&gt;parent);<br />
-+		list_del(curr);<br />
-+		kfree(procfs_dir_aux);<br />
-+	}<br />
-+<br />
-+	printk(KERN_DEBUG &quot;Finished removing procfs entries.n&quot;);<br />
-+<br />
-+	remove_proc_entry(ixgbe_procfs_dirname, NULL);<br />
-+#endif<br />
- }</p>
-<p> #if defined(CONFIG_DCA) || defined(CONFIG_DCA_MODULE)<br />
-diff -uNrp ixgbe-3.3.9//src/ixgbe_procfs.c ixgbe-3.3.9-procfs//src/ixgbe_procfs.c<br />
---- ixgbe-3.3.9//src/ixgbe_procfs.c	1970-01-01 01:00:00.000000000 +0100<br />
-+++ ixgbe-3.3.9-procfs//src/ixgbe_procfs.c	2011-07-19 14:30:59.818000007 +0200<br />
-@@ -0,0 +1,229 @@<br />
-+/*<br />
-+ *<br />
-+ *<br />
-+ *       Filename:  ixgbe_pap.c<br />
-+ *<br />
-+ *    Description:<br />
-+ *<br />
-+ *        Version:  1.0<br />
-+ *        Created:  06/06/11 16:42:59<br />
-+ *       Revision:  none<br />
-+ *       Compiler:  gcc<br />
-+ *        Company:  HPCN at UAM<br />
-+ *<br />
-+ *<br />
-+ */<br />
-+<br />
-+#include &lt;linux/types.h&gt;<br />
-+#include &lt;linux/kernel.h&gt;<br />
-+#include &lt;linux/vmalloc.h&gt;<br />
-+#include &lt;linux/netdevice.h&gt;<br />
-+<br />
-+#include &quot;ixgbe_procfs.h&quot;<br />
-+#include &quot;ixgbe_type.h&quot;<br />
-+<br />
-+unsigned short pap_allow_rate = 10; /* In Gbps */<br />
-+<br />
-+#ifdef CONFIG_PROC_FS<br />
-+struct list_head procfs_list;<br />
-+const struct file_operations pap_fops = {<br />
-+	.owner = THIS_MODULE,<br />
-+	.open = ixgbe_proc_single_open_pap,<br />
-+	.read = seq_read,<br />
-+	.llseek = seq_lseek,<br />
-+	.write = ixgbe_proc_write_pap,<br />
-+	.release = single_release,<br />
-+};<br />
-+<br />
-+int ixgbe_proc_seq_show_int(struct seq_file *s, void *v)<br />
-+{<br />
-+	seq_printf(s, &quot;%dn&quot;, *((int *)s-&gt;private));<br />
-+	return 0;<br />
-+}<br />
-+<br />
-+int ixgbe_proc_single_open_pap(struct inode *inode, struct file *file)<br />
-+{<br />
-+	return single_open(file, ixgbe_proc_seq_show_int, &amp;pap_allow_rate);<br />
-+}<br />
-+<br />
-+ssize_t ixgbe_proc_write_pap(struct file *filp, const char __user *buffer,<br />
-+					size_t count, loff_t *off)<br />
-+{<br />
-+	int num;<br />
-+	int ret = 0;<br />
-+	char buff[ixgbe_gbps_str_len + 1];<br />
-+	unsigned short pap_allow_rate_aux;<br />
-+<br />
-+	if (!capable(CAP_SYS_ADMIN) || !capable(CAP_SYS_RAWIO))<br />
-+		return -EACCES;<br />
-+<br />
-+	num = (count &lt;= ixgbe_gbps_str_len) ? count : ixgbe_gbps_str_len;<br />
-+	if (copy_from_user(buff, buffer, num))<br />
-+		return -EFAULT;<br />
-+	buff[num] = '&#92;&#48;';<br />
-+	pap_allow_rate_aux = simple_strtoul(buff, NULL, 10);<br />
-+<br />
-+	//ret = pap(pap_allow_rate_aux);<br />
-+	if(ret)<br />
-+		return -EOPNOTSUPP;<br />
-+<br />
-+	pap_allow_rate = pap_allow_rate_aux;<br />
-+<br />
-+	return count; /* Should I really return count, instead of pap() return value? */<br />
-+}<br />
-+<br />
-+<br />
-+int ixgbe_procfs_write(struct file * file, const char * buffer, unsigned long count, void * data)<br />
-+{<br />
-+	int len = 0;<br />
-+	int ret;<br />
-+<br />
-+	char buff[255];<br />
-+	char *buffptr = buff;<br />
-+	unsigned long pap_allow_rate_aux;<br />
-+	unsigned short pap_allow_rate_aux_sh;<br />
-+<br />
-+	struct ixgbe_adapter_procfs * adapter_procfs =<br />
-+				(struct ixgbe_adapter_procfs *)data;<br />
-+<br />
-+	/* zero fill buffer */<br />
-+	memset(buff, 0, 255);<br />
-+<br />
-+	//MOD_INC_USE_COUNT;<br />
-+<br />
-+	/* once we've got the procfs entry, we can do all wee need... */<br />
-+	if(strcmp(adapter_procfs-&gt;proc_entry-&gt;name, &quot;pap&quot;) == 0)<br />
-+	{<br />
-+		if(count &gt; ixgbe_gbps_str_len)<br />
-+			len = ixgbe_gbps_str_len;<br />
-+		else<br />
-+			len = count;<br />
-+<br />
-+		if(copy_from_user(buff, buffer, len))<br />
-+		{<br />
-+			//MOD_DEC_USE_COUNT;<br />
-+			return -EFAULT;<br />
-+		}<br />
-+<br />
-+		pap_allow_rate_aux = simple_strtoul(buff, &amp;buffptr, 10);<br />
-+<br />
-+		pap_allow_rate_aux_sh = (unsigned short)pap_allow_rate_aux;<br />
-+<br />
-+		ret = pap( adapter_procfs-&gt;nic_adapter, pap_allow_rate_aux );<br />
-+		if(ret)<br />
-+		{<br />
-+			//MOD_DEC_USE_COUNT;<br />
-+			return -EOPNOTSUPP;<br />
-+		}<br />
-+<br />
-+		adapter_procfs-&gt;pap =  pap_allow_rate_aux;<br />
-+<br />
-+	}<br />
-+#if 0<br />
-+	else if(strcmp(adapter_procfs-&gt;proc_entry-&gt;name, &quot;whatever&quot;) == 0)<br />
-+	{<br />
-+		//something else...<br />
-+	}<br />
-+#endif<br />
-+<br />
-+	//MOD_DEC_USE_COUNT;<br />
-+	return len;<br />
-+}<br />
-+<br />
-+int ixgbe_procfs_read(char * page, char ** start, off_t off, int count, int * eof, void * data)<br />
-+{<br />
-+	int len = 0;<br />
-+	struct ixgbe_adapter_procfs * adapter_procfs =<br />
-+				(struct ixgbe_adapter_procfs *)data;<br />
-+<br />
-+	//MOD_INC_USE_COUNT;<br />
-+	//<br />
-+	/* once we've got the procfs entry, we can do all wee need... */<br />
-+	if(strcmp(adapter_procfs-&gt;proc_entry-&gt;name, &quot;pap&quot;) == 0)<br />
-+	{<br />
-+		len = sprintf(page, &quot;%s=%dn&quot;,<br />
-+			&quot;pap&quot;, adapter_procfs-&gt;pap);<br />
-+	}<br />
-+#if 0<br />
-+	else if(strcmp(adapter_procfs-&gt;proc_entry-&gt;name, &quot;whatever&quot;) == 0)<br />
-+	{<br />
-+		//something else...<br />
-+	}<br />
-+#endif<br />
-+<br />
-+	//MOD_DEC_USE_COUNT;<br />
-+	return len;<br />
-+}<br />
-+<br />
-+<br />
-+#endif<br />
-+<br />
-+int pap_rate_adjust_ioctl(struct ixgbe_adapter *adapter, struct ifreq *ifr)<br />
-+{<br />
-+<br />
-+	if(ifr-&gt;ifr_bandwidth&gt;10 || ifr-&gt;ifr_bandwidth &lt; 0)<br />
-+		return -EOPNOTSUPP;<br />
-+<br />
-+	pap_allow_rate = ifr-&gt;ifr_bandwidth;<br />
-+	return pap(adapter, pap_allow_rate);<br />
-+}<br />
-+<br />
-+int pap(struct ixgbe_adapter *adapter, unsigned short rate_gbps)<br />
-+{<br />
-+	struct ixgbe_hw *hw = &amp;adapter-&gt;hw;<br />
-+	u32 pap_rate = 0x00000000;<br />
-+	if(rate_gbps &gt; 10)<br />
-+		return -EOPNOTSUPP;<br />
-+<br />
-+	pap_rate = create_pap_regval(rate_gbps);<br />
-+<br />
-+	IXGBE_WRITE_REG( hw, IXGBE_PAP, pap_rate );<br />
-+	IXGBE_WRITE_FLUSH(hw); /* Is this necessary */<br />
-+<br />
-+	/* Add a short delay */<br />
-+	msleep(50);<br />
-+	return 0;<br />
-+}<br />
-+<br />
-+u32 create_pap_regval(unsigned short gbps)<br />
-+{<br />
-+	u32 pap_rate = IXGBE_PAP_REG_TEMPLATE; /* A little concerned over endianess... */<br />
-+<br />
-+	switch(gbps)<br />
-+	{<br />
-+		case 1:<br />
-+			pap_rate |= (0x1 &lt;&lt; IXGBE_PAP_OFFSET);<br />
-+			break;<br />
-+		case 2:<br />
-+			pap_rate |= (0x2 &lt;&lt; IXGBE_PAP_OFFSET);<br />
-+			break;<br />
-+		case 3:<br />
-+			pap_rate |= (0x3 &lt;&lt; IXGBE_PAP_OFFSET);<br />
-+			break;<br />
-+		case 4:<br />
-+			pap_rate |= (0x4 &lt;&lt; IXGBE_PAP_OFFSET);<br />
-+			break;<br />
-+		case 5:<br />
-+			pap_rate |= (0x5 &lt;&lt; IXGBE_PAP_OFFSET);<br />
-+			break;<br />
-+		case 6:<br />
-+			pap_rate |= (0x6 &lt;&lt; IXGBE_PAP_OFFSET);<br />
-+			break;<br />
-+		case 7:<br />
-+			pap_rate |= (0x7 &lt;&lt; IXGBE_PAP_OFFSET);<br />
-+			break;<br />
-+		case 8:<br />
-+			pap_rate |= (0x8 &lt;&lt; IXGBE_PAP_OFFSET);<br />
-+			break;<br />
-+		case 9:<br />
-+			pap_rate |= (0x9 &lt;&lt; IXGBE_PAP_OFFSET);<br />
-+			break;<br />
-+		case 10:<br />
-+		case 0:<br />
-+		default:<br />
-+			break;<br />
-+	}<br />
-+	return pap_rate;<br />
-+}<br />
-diff -uNrp ixgbe-3.3.9//src/ixgbe_procfs.h ixgbe-3.3.9-procfs//src/ixgbe_procfs.h<br />
---- ixgbe-3.3.9//src/ixgbe_procfs.h	1970-01-01 01:00:00.000000000 +0100<br />
-+++ ixgbe-3.3.9-procfs//src/ixgbe_procfs.h	2011-07-19 14:30:45.139000008 +0200<br />
-@@ -0,0 +1,74 @@<br />
-+/*<br />
-+ *<br />
-+ *       Filename:  ixgbe_pap.h<br />
-+ *<br />
-+ *    Description:<br />
-+ *<br />
-+ *        Version:  1.0<br />
-+ *        Created:  06/06/11 16:38:39<br />
-+ *       Revision:  none<br />
-+ *       Compiler:  gcc<br />
-+ *<br />
-+ *        Company:  HPCN - High Performance Computing and Networking Lab at UAM<br />
-+ *<br />
-+ */<br />
-+<br />
-+#ifndef _IXGBE_PROCFS_H<br />
-+#define _IXGBE_PROCFS_H<br />
-+<br />
-+#include &lt;linux/kernel.h&gt;<br />
-+#include &lt;linux/if.h&gt;<br />
-+<br />
-+#include &quot;ixgbe.h&quot;<br />
-+<br />
-+#ifdef CONFIG_PROC_FS<br />
-+#include &lt;linux/proc_fs.h&gt;<br />
-+<br />
-+#define ixgbe_procfs_dirname &quot;ixgbe&quot;<br />
-+#define ixgbe_procfs_pap &quot;pap&quot;<br />
-+<br />
-+#define ixgbe_gbps_str_len 2<br />
-+<br />
-+<br />
-+struct ixgbe_adapter_procfs_dir<br />
-+{<br />
-+	struct proc_dir_entry * proc_entry;<br />
-+	struct list_head procfs_dir_node; /* This struct belongs in a list of proc dir structs. */<br />
-+	struct list_head procfs_nodes_list; /* This will be a list of procfs entries for a given NIC. */<br />
-+};<br />
-+<br />
-+struct ixgbe_adapter_procfs<br />
-+{<br />
-+	unsigned short pap;<br />
-+	struct ixgbe_adapter * nic_adapter;<br />
-+	struct proc_dir_entry * proc_entry;<br />
-+	struct list_head procfs_node;<br />
-+};<br />
-+<br />
-+<br />
-+//Define a list of struct adapter_proc, one for each adapter?<br />
-+<br />
-+#endif<br />
-+<br />
-+#define IXGBE_PAP_REG_TEMPLATE 0x0000FFFF<br />
-+#define IXGBE_PAP_OFFSET 16<br />
-+<br />
-+#ifdef CONFIG_PROC_FS<br />
-+<br />
-+int ixgbe_proc_single_open_pap(struct inode *inode, struct file *file);<br />
-+ssize_t ixgbe_proc_write_pap(struct file *filp, const char __user *buffer,<br />
-+					size_t count, loff_t *off);<br />
-+<br />
-+#endif<br />
-+<br />
-+int pap(struct ixgbe_adapter *adapter, unsigned short rate_gbps);<br />
-+u32 create_pap_regval(unsigned short gbps);<br />
-+int pap_rate_adjust_ioctl(struct ixgbe_adapter *adapter, struct ifreq *ifr);<br />
-+<br />
-+int ixgbe_procfs_read(char * page, char ** start, off_t off, int count, int * eof, void * data);<br />
-+int ixgbe_procfs_write(struct file * file, const char * buffer, unsigned long count, void * data);<br />
-+<br />
-+#endif /* _IXGBE_PROCFS_H  */<br />
-[/diff]</p>
+{% highlight diff %}
+diff -uNrp ixgbe-3.3.9//src/Makefile ixgbe-3.3.9-procfs//src/Makefile
+--- ixgbe-3.3.9//src/Makefile	2011-04-20 01:06:31.000000000 +0200
++++ ixgbe-3.3.9-procfs//src/Makefile	2011-07-19 14:32:10.771000008 +0200
+@@ -36,11 +36,13 @@ CFILES = ixgbe_main.c ixgbe_common.c ixg
+          ixgbe_sriov.c ixgbe_mbx.c
+          ixgbe_dcb.c ixgbe_dcb_82598.c
+          ixgbe_dcb_82599.c
+-         ixgbe_phy.c
++         ixgbe_phy.c
++	 ixgbe_procfs.c
+ HFILES = ixgbe.h ixgbe_common.h ixgbe_api.h ixgbe_osdep.h kcompat.h
+          ixgbe_sriov.h ixgbe_mbx.h
+          ixgbe_dcb.h
+-         ixgbe_phy.h
++         ixgbe_phy.h
++	 ixgbe_procfs.h
+ ifeq (,$(BUILD_KERNEL))
+ BUILD_KERNEL=$(shell uname -r)
+ endif
+@@ -146,6 +148,7 @@ ifeq ($(ARCH),ppc64)
+ endif
+ # extra flags for module builds
++EXTRA_CFLAGS += -DPAP_IOCTL
+ EXTRA_CFLAGS += -DDRIVER_$(shell echo $(DRIVER_NAME) | tr '[a-z]' '[A-Z]')
+ EXTRA_CFLAGS += -DDRIVER_NAME=$(DRIVER_NAME)
+ EXTRA_CFLAGS += -DDRIVER_NAME_CAPS=$(shell echo $(DRIVER_NAME) | tr '[a-z]' '[A-Z]')
+diff -uNrp ixgbe-3.3.9//src/ixgbe_main.c ixgbe-3.3.9-procfs//src/ixgbe_main.c
+--- ixgbe-3.3.9//src/ixgbe_main.c	2011-04-20 01:06:31.000000000 +0200
++++ ixgbe-3.3.9-procfs//src/ixgbe_main.c	2011-07-19 14:31:45.616000008 +0200
+@@ -53,10 +53,15 @@
+ #include <linux/ethtool.h>
+ #endif
++#ifdef PAP_IOCTL
++#include "ixgbe_procfs.h"
++#endif
++
+ #include "ixgbe.h"
+ #include "ixgbe_sriov.h"
++
+ char ixgbe_driver_name[] = "ixgbe";
+ static const char ixgbe_driver_string[] =
+ 			      "Intel(R) 10 Gigabit PCI Express Network Driver";
+@@ -68,6 +73,7 @@ static const char ixgbe_driver_string[]
+ #define DRIVERNAPI "-NAPI"
+ #endif
++
+ #define FPGA
+ #define VMDQ_TAG
+@@ -132,6 +138,14 @@ MODULE_DESCRIPTION("Intel(R) 10 Gigabit
+ MODULE_LICENSE("GPL");
+ MODULE_VERSION(DRV_VERSION);
++#ifdef CONFIG_PROC_FS
++extern const struct file_operations pap_fops;
++extern struct list_head procfs_list;
++struct proc_dir_entry *ixgbe_proc_dir = NULL;
++struct proc_dir_entry *ixgbe_proc_pap = NULL;
++#endif
++
++
+ #define DEFAULT_DEBUG_LEVEL_SHIFT 3
+ static inline void ixgbe_disable_sriov(struct ixgbe_adapter *adapter)
+@@ -7837,9 +7851,14 @@ static int ixgbe_del_sanmac_netdev(struc
+  **/
+ static int ixgbe_ioctl(struct net_device *netdev, struct ifreq *ifr, int cmd)
+ {
++	struct ixgbe_adapter *adapter = netdev_priv(netdev);
+ 	switch (cmd) {
+ 	case SIOCETHTOOL:
+ 		return ethtool_ioctl(ifr);
++#ifdef PAP_IOCTL
++	case SIOCDEVPRIVATE:
++		return pap_rate_adjust(adapter, ifr);
++#endif
+ 	default:
+ 		return -EOPNOTSUPP;
+ 	}
+@@ -8063,6 +8082,8 @@ static int __devinit ixgbe_probe(struct
+ 				 const struct pci_device_id *ent)
+ {
+ 	struct net_device *netdev;
++	struct ixgbe_adapter_procfs *ixgbe_procfs_aux = NULL;
++	struct ixgbe_adapter_procfs_dir *ixgbe_procfs_dir_aux = NULL;
+ 	struct ixgbe_adapter *adapter = NULL;
+ 	struct ixgbe_hw *hw = NULL;
+ 	static int cards_found;
+@@ -8175,6 +8196,7 @@ static int __devinit ixgbe_probe(struct
+ 	e_info(tx_err, "my (original) node was: %dn", dev_to_node(&pdev->dev));
+ #endif /* HAVE_DEVICE_NUMA_NODE */
++
+ #ifdef HAVE_PCI_ERS
+ 	/*
+ 	 * call save state here in standalone driver because it relies on
+@@ -8569,6 +8591,48 @@ no_info_string:
+ 	ixgbe_add_sanmac_netdev(netdev);
+ #endif /* (HAVE_NETDEV_STORAGE_ADDRESS) && (NETDEV_HW_ADDR_T_SAN) */
++
++#ifdef CONFIG_PROC_FS
++
++	if(!(ixgbe_procfs_dir_aux = kmalloc(sizeof(struct ixgbe_adapter_procfs_dir), GFP_KERNEL)))
++		goto end_procfs;
++
++	//ixgbe_procfs_dir_aux->proc_entry = proc_mkdir_mode(netdev->name, 0644, ixgbe_proc_dir);
++	ixgbe_procfs_dir_aux->proc_entry = proc_mkdir(netdev->name, ixgbe_proc_dir);
++	INIT_LIST_HEAD(&ixgbe_procfs_dir_aux->procfs_dir_node);
++	INIT_LIST_HEAD(&ixgbe_procfs_dir_aux->procfs_nodes_list);
++	list_add(&ixgbe_procfs_dir_aux->procfs_dir_node, &procfs_list);
++
++	/* if this fails how should we behave? Ugly goto for now.... */
++	if(!(ixgbe_procfs_aux = kmalloc(sizeof(struct ixgbe_adapter_procfs), GFP_KERNEL)))
++		goto end_procfs;
++
++	/* Now lets create the procfs PAP entry node */
++	ixgbe_procfs_aux->proc_entry = create_proc_entry("pap", 0644, ixgbe_procfs_dir_aux->proc_entry);
++	ixgbe_procfs_aux->nic_adapter = adapter;
++	ixgbe_procfs_aux->proc_entry->data = ixgbe_procfs_aux;
++
++	/*  ixgbe_procfs_aux->proc_entry->data = ixgbe_procfs_aux;
++	 *  points to itself.
++	 *
++	 *  we can use container_of instead in the callback.
++	 *
++	 *  */
++	ixgbe_procfs_aux->proc_entry->read_proc = ixgbe_procfs_read;
++	ixgbe_procfs_aux->proc_entry->write_proc = ixgbe_procfs_write;
++
++	/* Default values... */
++	ixgbe_procfs_aux->pap = 10;
++
++	INIT_LIST_HEAD(&ixgbe_procfs_aux->procfs_node);
++	list_add(&ixgbe_procfs_aux->procfs_node, &ixgbe_procfs_dir_aux->procfs_nodes_list);
++
++	/* If you need additional procfs entries, add them similarly here... */
++
++end_procfs:
++#endif
++
++
+ 	e_info(probe, "Intel(R) 10 Gigabit Network Connectionn");
+ 	cards_found++;
+ 	return 0;
+@@ -8800,6 +8864,18 @@ static int __init ixgbe_init_module(void
+ 	dca_register_notify(&dca_notifier);
+ #endif
++
++#ifdef CONFIG_PROC_FS
++
++	ixgbe_proc_dir = proc_mkdir(ixgbe_procfs_dirname, NULL);
++	if (!ixgbe_proc_dir)
++		return -ENOMEM;
++	/* General NIC options such as Pause and Pace, for each interface (port),
++	 * will be "set up" during the probe phase. They will be added to this list...
++	 * */
++	INIT_LIST_HEAD(&procfs_list);
++#endif
++
+ 	ret = pci_register_driver(&ixgbe_driver);
+ 	return ret;
+ }
+@@ -8814,13 +8890,46 @@ module_init(ixgbe_init_module);
+  **/
+ static void __exit ixgbe_exit_module(void)
+ {
++#ifdef CONFIG_PROC_FS
++	struct ixgbe_adapter_procfs_dir * procfs_dir_aux;
++	struct ixgbe_adapter_procfs * procfs_aux;
++
++	struct list_head *prev, *curr;
++	struct list_head *prev2, *curr2;
++#endif
++
+ #if defined(CONFIG_DCA) || defined(CONFIG_DCA_MODULE)
+ 	dca_unregister_notify(&dca_notifier);
+ #endif
+ #ifndef CONFIG_DCB
+ 	ixgbe_dcb_netlink_unregister();
+ #endif
++
+ 	pci_unregister_driver(&ixgbe_driver);
++#ifdef CONFIG_PROC_FS
++	/* Cleanup the remaining procfs stuff...
++	 *
++	 * Loop over procfs_list freeing everything.
++	 * */
++	list_for_each_safe(curr, prev, &procfs_list)
++	{
++		procfs_dir_aux = list_entry(curr, struct ixgbe_adapter_procfs_dir, procfs_dir_node);
++		list_for_each_safe(curr2, prev2, &procfs_dir_aux->procfs_nodes_list)
++		{
++			procfs_aux = list_entry(curr2, struct ixgbe_adapter_procfs, procfs_node);
++			remove_proc_entry(procfs_aux->proc_entry->name, procfs_aux->proc_entry->parent);
++			list_del(curr2);
++			kfree(procfs_aux);
++		}
++		remove_proc_entry(procfs_dir_aux->proc_entry->name, procfs_dir_aux->proc_entry->parent);
++		list_del(curr);
++		kfree(procfs_dir_aux);
++	}
++
++	printk(KERN_DEBUG "Finished removing procfs entries.n");
++
++	remove_proc_entry(ixgbe_procfs_dirname, NULL);
++#endif
+ }
+ #if defined(CONFIG_DCA) || defined(CONFIG_DCA_MODULE)
+diff -uNrp ixgbe-3.3.9//src/ixgbe_procfs.c ixgbe-3.3.9-procfs//src/ixgbe_procfs.c
+--- ixgbe-3.3.9//src/ixgbe_procfs.c	1970-01-01 01:00:00.000000000 +0100
++++ ixgbe-3.3.9-procfs//src/ixgbe_procfs.c	2011-07-19 14:30:59.818000007 +0200
+@@ -0,0 +1,229 @@
++/*
++ *
++ *
++ *       Filename:  ixgbe_pap.c
++ *
++ *    Description:
++ *
++ *        Version:  1.0
++ *        Created:  06/06/11 16:42:59
++ *       Revision:  none
++ *       Compiler:  gcc
++ *        Company:  HPCN at UAM
++ *
++ *
++ */
++
++#include <linux/types.h>
++#include <linux/kernel.h>
++#include <linux/vmalloc.h>
++#include <linux/netdevice.h>
++
++#include "ixgbe_procfs.h"
++#include "ixgbe_type.h"
++
++unsigned short pap_allow_rate = 10; /* In Gbps */
++
++#ifdef CONFIG_PROC_FS
++struct list_head procfs_list;
++const struct file_operations pap_fops = {
++	.owner = THIS_MODULE,
++	.open = ixgbe_proc_single_open_pap,
++	.read = seq_read,
++	.llseek = seq_lseek,
++	.write = ixgbe_proc_write_pap,
++	.release = single_release,
++};
++
++int ixgbe_proc_seq_show_int(struct seq_file *s, void *v)
++{
++	seq_printf(s, "%dn", *((int *)s->private));
++	return 0;
++}
++
++int ixgbe_proc_single_open_pap(struct inode *inode, struct file *file)
++{
++	return single_open(file, ixgbe_proc_seq_show_int, &pap_allow_rate);
++}
++
++ssize_t ixgbe_proc_write_pap(struct file *filp, const char __user *buffer,
++					size_t count, loff_t *off)
++{
++	int num;
++	int ret = 0;
++	char buff[ixgbe_gbps_str_len + 1];
++	unsigned short pap_allow_rate_aux;
++
++	if (!capable(CAP_SYS_ADMIN) || !capable(CAP_SYS_RAWIO))
++		return -EACCES;
++
++	num = (count <= ixgbe_gbps_str_len) ? count : ixgbe_gbps_str_len;
++	if (copy_from_user(buff, buffer, num))
++		return -EFAULT;
++	buff[num] = '\0';
++	pap_allow_rate_aux = simple_strtoul(buff, NULL, 10);
++
++	//ret = pap(pap_allow_rate_aux);
++	if(ret)
++		return -EOPNOTSUPP;
++
++	pap_allow_rate = pap_allow_rate_aux;
++
++	return count; /* Should I really return count, instead of pap() return value? */
++}
++
++
++int ixgbe_procfs_write(struct file * file, const char * buffer, unsigned long count, void * data)
++{
++	int len = 0;
++	int ret;
++
++	char buff[255];
++	char *buffptr = buff;
++	unsigned long pap_allow_rate_aux;
++	unsigned short pap_allow_rate_aux_sh;
++
++	struct ixgbe_adapter_procfs * adapter_procfs =
++				(struct ixgbe_adapter_procfs *)data;
++
++	/* zero fill buffer */
++	memset(buff, 0, 255);
++
++	//MOD_INC_USE_COUNT;
++
++	/* once we've got the procfs entry, we can do all wee need... */
++	if(strcmp(adapter_procfs->proc_entry->name, "pap") == 0)
++	{
++		if(count > ixgbe_gbps_str_len)
++			len = ixgbe_gbps_str_len;
++		else
++			len = count;
++
++		if(copy_from_user(buff, buffer, len))
++		{
++			//MOD_DEC_USE_COUNT;
++			return -EFAULT;
++		}
++
++		pap_allow_rate_aux = simple_strtoul(buff, &buffptr, 10);
++
++		pap_allow_rate_aux_sh = (unsigned short)pap_allow_rate_aux;
++
++		ret = pap( adapter_procfs->nic_adapter, pap_allow_rate_aux );
++		if(ret)
++		{
++			//MOD_DEC_USE_COUNT;
++			return -EOPNOTSUPP;
++		}
++
++		adapter_procfs->pap =  pap_allow_rate_aux;
++
++	}
++#if 0
++	else if(strcmp(adapter_procfs->proc_entry->name, "whatever") == 0)
++	{
++		//something else...
++	}
++#endif
++
++	//MOD_DEC_USE_COUNT;
++	return len;
++}
++
++int ixgbe_procfs_read(char * page, char ** start, off_t off, int count, int * eof, void * data)
++{
++	int len = 0;
++	struct ixgbe_adapter_procfs * adapter_procfs =
++				(struct ixgbe_adapter_procfs *)data;
++
++	//MOD_INC_USE_COUNT;
++	//
++	/* once we've got the procfs entry, we can do all wee need... */
++	if(strcmp(adapter_procfs->proc_entry->name, "pap") == 0)
++	{
++		len = sprintf(page, "%s=%dn",
++			"pap", adapter_procfs->pap);
++	}
++#if 0
++	else if(strcmp(adapter_procfs->proc_entry->name, "whatever") == 0)
++	{
++		//something else...
++	}
++#endif
++
++	//MOD_DEC_USE_COUNT;
++	return len;
++}
++
++
++#endif
++
++int pap_rate_adjust_ioctl(struct ixgbe_adapter *adapter, struct ifreq *ifr)
++{
++
++	if(ifr->ifr_bandwidth>10 || ifr->ifr_bandwidth < 0)
++		return -EOPNOTSUPP;
++
++	pap_allow_rate = ifr->ifr_bandwidth;
++	return pap(adapter, pap_allow_rate);
++}
++
++int pap(struct ixgbe_adapter *adapter, unsigned short rate_gbps)
++{
++	struct ixgbe_hw *hw = &adapter->hw;
++	u32 pap_rate = 0x00000000;
++	if(rate_gbps > 10)
++		return -EOPNOTSUPP;
++
++	pap_rate = create_pap_regval(rate_gbps);
++
++	IXGBE_WRITE_REG( hw, IXGBE_PAP, pap_rate );
++	IXGBE_WRITE_FLUSH(hw); /* Is this necessary */
++
++	/* Add a short delay */
++	msleep(50);
++	return 0;
++}
++
++u32 create_pap_regval(unsigned short gbps)
++{
++	u32 pap_rate = IXGBE_PAP_REG_TEMPLATE; /* A little concerned over endianess... */
++
++	switch(gbps)
++	{
++		case 1:
++			pap_rate |= (0x1 << IXGBE_PAP_OFFSET);
++			break;
++		case 2:
++			pap_rate |= (0x2 << IXGBE_PAP_OFFSET);
++			break;
++		case 3:
++			pap_rate |= (0x3 << IXGBE_PAP_OFFSET);
++			break;
++		case 4:
++			pap_rate |= (0x4 << IXGBE_PAP_OFFSET);
++			break;
++		case 5:
++			pap_rate |= (0x5 << IXGBE_PAP_OFFSET);
++			break;
++		case 6:
++			pap_rate |= (0x6 << IXGBE_PAP_OFFSET);
++			break;
++		case 7:
++			pap_rate |= (0x7 << IXGBE_PAP_OFFSET);
++			break;
++		case 8:
++			pap_rate |= (0x8 << IXGBE_PAP_OFFSET);
++			break;
++		case 9:
++			pap_rate |= (0x9 << IXGBE_PAP_OFFSET);
++			break;
++		case 10:
++		case 0:
++		default:
++			break;
++	}
++	return pap_rate;
++}
+diff -uNrp ixgbe-3.3.9//src/ixgbe_procfs.h ixgbe-3.3.9-procfs//src/ixgbe_procfs.h
+--- ixgbe-3.3.9//src/ixgbe_procfs.h	1970-01-01 01:00:00.000000000 +0100
++++ ixgbe-3.3.9-procfs//src/ixgbe_procfs.h	2011-07-19 14:30:45.139000008 +0200
+@@ -0,0 +1,74 @@
++/*
++ *
++ *       Filename:  ixgbe_pap.h
++ *
++ *    Description:
++ *
++ *        Version:  1.0
++ *        Created:  06/06/11 16:38:39
++ *       Revision:  none
++ *       Compiler:  gcc
++ *
++ *        Company:  HPCN - High Performance Computing and Networking Lab at UAM
++ *
++ */
++
++#ifndef _IXGBE_PROCFS_H
++#define _IXGBE_PROCFS_H
++
++#include <linux/kernel.h>
++#include <linux/if.h>
++
++#include "ixgbe.h"
++
++#ifdef CONFIG_PROC_FS
++#include <linux/proc_fs.h>
++
++#define ixgbe_procfs_dirname "ixgbe"
++#define ixgbe_procfs_pap "pap"
++
++#define ixgbe_gbps_str_len 2
++
++
++struct ixgbe_adapter_procfs_dir
++{
++	struct proc_dir_entry * proc_entry;
++	struct list_head procfs_dir_node; /* This struct belongs in a list of proc dir structs. */
++	struct list_head procfs_nodes_list; /* This will be a list of procfs entries for a given NIC. */
++};
++
++struct ixgbe_adapter_procfs
++{
++	unsigned short pap;
++	struct ixgbe_adapter * nic_adapter;
++	struct proc_dir_entry * proc_entry;
++	struct list_head procfs_node;
++};
++
++
++//Define a list of struct adapter_proc, one for each adapter?
++
++#endif
++
++#define IXGBE_PAP_REG_TEMPLATE 0x0000FFFF
++#define IXGBE_PAP_OFFSET 16
++
++#ifdef CONFIG_PROC_FS
++
++int ixgbe_proc_single_open_pap(struct inode *inode, struct file *file);
++ssize_t ixgbe_proc_write_pap(struct file *filp, const char __user *buffer,
++					size_t count, loff_t *off);
++
++#endif
++
++int pap(struct ixgbe_adapter *adapter, unsigned short rate_gbps);
++u32 create_pap_regval(unsigned short gbps);
++int pap_rate_adjust_ioctl(struct ixgbe_adapter *adapter, struct ifreq *ifr);
++
++int ixgbe_procfs_read(char * page, char ** start, off_t off, int count, int * eof, void * data);
++int ixgbe_procfs_write(struct file * file, const char * buffer, unsigned long count, void * data);
++
++#endif /* _IXGBE_PROCFS_H  */
+[/diff]
+{% endhighlight %}
