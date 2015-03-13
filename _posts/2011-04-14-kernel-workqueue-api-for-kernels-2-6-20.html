@@ -22,28 +22,28 @@ author:
 ---
 <p>I've recently been developing an LKM and was using some great Robert Love kernel literature, unfortunately it was from a while back. I am coding for a 2.6.35 kernel version and it wasn't until I proceeded to compile that I realized the workqueue API had changed quite a bit. I did a little bit of research at <a href="http://lwn.net/Articles/211279/">lwn.net</a> showed they had changed the API because the work_struct was simply too large. Being a structure which was used quite a bit, David Howells decided it was probably time to make it slimmer than the 96 bytes it used to occupy. He actually managed to make the struct lose 64 bytes, leaving it in a trimmed down 32 bytes. Not bad, huh? Anyway, this forced an API change and it actually took me a while to figure out how to use it. For the record, this is what happens:</p>
 {% highlight c %}
-/* prototype for a worker function */<br />
-static void myworkerf(struct work_struct *);<br />
+/* prototype for a worker function */
+static void myworkerf(struct work_struct *);
 {% endhighlight %}
 The great thing is David Howells realized that we could use the container_of() kernel macro to grab the parent structure for a certain structure element, so the answer was to make sure the work_struct pointer we used when calling INIT_WORK was in fact contained in our <em>argument structure</em>.</p>
 {% highlight c %}
-structure myworkerargs {<br />
-        /*...some struct elements...*/<br />
-        struct work_struct mywork;<br />
-        /*...other struct elements...*/<br />
+structure myworkerargs {
+        /*...some struct elements...*/
+        struct work_struct mywork;
+        /*...other struct elements...*/
 }
-/*This is how you can retrieve your arguments from the worker function...*/<br />
-static void myworkerf(struct work_struct * work){<br />
-        /*....*/<br />
-        struct myworkerargs * args = container_of(work, struct myworkerargs, mywork)<br />
-       /* you now have your arguments and are ready to go..... */<br />
+/*This is how you can retrieve your arguments from the worker function...*/
+static void myworkerf(struct work_struct * work){
+        /*....*/
+        struct myworkerargs * args = container_of(work, struct myworkerargs, mywork)
+       /* you now have your arguments and are ready to go..... */
 }
-/* This is how we'd queue up some work... */<br />
-void mylkm_init(){<br />
+/* This is how we'd queue up some work... */
+void mylkm_init(){
         struct myworkerargs;
-        /*...*/<br />
-        INIT_WORK(&myworkerargs.mywork, myworkerf);<br />
-        /*...*/<br />
-}<br />
+        /*...*/
+        INIT_WORK(&myworkerargs.mywork, myworkerf);
+        /*...*/
+}
 {% endhighlight %}
 <p>So that's how you'd use the new API. I also read that if you try to initialize some more work with the same <em>myworkerargs</em> structure  while the previous work is still in the workqueue, the work will be rejected. The workaround is quite obvious... kmalloc a new <em>myworkerargs</em> structure, and kfree() it later. Where to kfree() that memory up from might be a little more delicate; at the end of the worker function perhaps? Or keeping track from within the WORK_INIT caller function? I will try to find out if the former would cause problems.</p>
