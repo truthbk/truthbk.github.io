@@ -81,6 +81,7 @@ class HTMLSession:
 				return None
 		else:
 			return handle.read()
+
 def main(argv):
 	username = ""
 	password = ""
@@ -118,7 +119,9 @@ def main(argv):
 	response = myhtmlsession.openURI(thelogouturl, None)
 	if response == None:
 		sys.exit(0)
+
 if __name__ == "__main__":
 	main(sys.argv[1:])
+
 
 {% endhighlight %}
