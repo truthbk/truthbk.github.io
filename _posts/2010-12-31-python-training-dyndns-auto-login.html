@@ -23,7 +23,7 @@ author:
 <p>It's been a while, I know. For one reason or another I haven't been getting round to updating the blog lately. Worst thing is I do have a bunch of stuff to post, so I hope to keep it coming in the near future. Anyway, I've been trying to polish my python skills a little bit, because I have to admit, it has to be one of the sweetest scripting languages out there: tons of support, and libraries, really doesn't have a steep learning curve at all, object oriented (if you wish).... there's really nothing much I can say in the negative aspect. </p>
 <p>For this second lil' script I figured we could do something helpful once again. Many of you might host a little web server at home, or like ssh access to your machine, but keep forgetting you static ip, or even worst, get a dynamic ip  from you ISP. I use <a href="http://www.dyndns.com">DynDNS</a> to help me get around these small IP troubles. And as helpful as it is, it also comes with one fairly annoying string attached, when you get yourself the free account, you need to login once a month to avoid your name address from expiring. I just want a name for my IP, and I tend to keep forgetting to do these things. So every month or so, two if I was lucky, I'd find my name address gone. Python script to the rescue. You can add this script to your crontab, and it will login automatically for you with the username and password provided to the script. Not rocket science, but definitely helpful.</p>
 <p>The most relevant stuff here is the use of urllib and urllib2, which allow us to encode parameters for an HTTP POST request, and perform the actual page requests. The whole login process also uses a cookie, which made us have to use the cookielib to set up a cookiejar. Before you login, you are given a cookie, which you need to store for the process to succeed. Once you have that sorted, you can submit that form together with the right parameters (including a hidden one you need to parse from the HTML output). I figured out my explanation isn't too clarifying, so without further ado, here's the script:<br />
-<!--more--><br />
+<br /> </p>
 {% highlight python %}
 #!/usr/bin/python
 import urllib
@@ -120,4 +120,5 @@ def main(argv):
 		sys.exit(0)
 if __name__ == "__main__":
 	main(sys.argv[1:])
+
 {% endhighlight %}
