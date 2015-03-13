@@ -24,97 +24,100 @@ author:
 <p>For this second lil' script I figured we could do something helpful once again. Many of you might host a little web server at home, or like ssh access to your machine, but keep forgetting you static ip, or even worst, get a dynamic ip  from you ISP. I use <a href="http://www.dyndns.com">DynDNS</a> to help me get around these small IP troubles. And as helpful as it is, it also comes with one fairly annoying string attached, when you get yourself the free account, you need to login once a month to avoid your name address from expiring. I just want a name for my IP, and I tend to keep forgetting to do these things. So every month or so, two if I was lucky, I'd find my name address gone. Python script to the rescue. You can add this script to your crontab, and it will login automatically for you with the username and password provided to the script. Not rocket science, but definitely helpful.</p>
 <p>The most relevant stuff here is the use of urllib and urllib2, which allow us to encode parameters for an HTTP POST request, and perform the actual page requests. The whole login process also uses a cookie, which made us have to use the cookielib to set up a cookiejar. Before you login, you are given a cookie, which you need to store for the process to succeed. Once you have that sorted, you can submit that form together with the right parameters (including a hidden one you need to parse from the HTML output). I figured out my explanation isn't too clarifying, so without further ado, here's the script:<br />
 <!--more--><br />
-[python]<br />
-#!/usr/bin/python</p>
-<p>import urllib<br />
-import urllib2<br />
-import cookielib<br />
-import getopt<br />
-import sys</p>
-<p>def getRandHTMLResponse(response):<br />
-	target = &quot;&lt;form id='login&quot;<br />
-	targetresponse = &quot;&lt;div id='loginbox'&quot;</p>
-<p>	response = response[response.find(targetresponse):len(response)]<br />
-	return response[response.find(target)+len(target):response.find(target)+len(target):response.find(target)+len(target)+4]</p>
-<p>def getHiddenRandHTMLResponse(response):<br />
-	target = &quot;&lt;input type='hidden' name='multiform' value='&quot;<br />
-	targetresponse = &quot;&lt;div id='loginbox'&quot;<br />
-	parsedres = response[response.find(targetresponse):len(response)]<br />
-	return parsedres[parsedres.find(target)+len(target):parsedres.find(target)+len(target)+34]</p>
-<p>def checkLogin(response):<br />
-	target = &quot;&lt;title&gt;DynDNS.com - My Account&lt;/title&gt;&quot;<br />
-	if response.find(target) == -1:<br />
-		return False<br />
-	return True</p>
-<p>class HTMLSession:<br />
-	cj = None<br />
-	opener = None<br />
-	txHeaders = None</p>
-<p>	def __init__(self, txHeaders):<br />
-		#The CookieJar will hold any cookies necessary throughout the login process.<br />
-		self.cj = cookielib.MozillaCookieJar()<br />
-		self.txHeaders = txHeaders<br />
-		self.opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(self.cj))<br />
-        	urllib2.install_opener(self.opener)</p>
-<p>	def setHeaders(self, txheaders):<br />
-		self.txHeaders = txHeaders</p>
-<p>	def getHeaders(self):<br />
-		return self.txHeaders</p>
-<p>	def openURI(self, uri, txdata):<br />
-		try:<br />
-			req = urllib2.Request(uri, txdata, self.txHeaders)<br />
-			# create a request object</p>
-<p>			handle = urllib2.urlopen(req)<br />
-			# and open it to return a handle on the url</p>
-<p>		except IOError as e:<br />
-			print 'we failed to open &quot;%s&quot;.' % uri</p>
-<p>			if hasattr(e, 'code'):<br />
-				print 'We failed with error code - %s.' % e.code<br />
-			elif hasattr(e, 'reason'):<br />
-				print &quot;The error object has the following 'reason' attribute :&quot;<br />
-				print e.reason<br />
-				print &quot;This usually means the server doesn't exist,'&quot;<br />
-				print &quot;is down, or we don't have an internet connection.&quot;<br />
-				return None<br />
-		else:<br />
-			return handle.read()</p>
-<p>def main(argv):<br />
-	username = &quot;&quot;<br />
-	password = &quot;&quot;<br />
-	hiddenval = &quot;&quot;<br />
-	theurl = &quot;https://www.dyndns.com/account/entrance/&quot;<br />
-	thelogouturl = &quot;https://www.dyndns.com/account/entrance/?__logout=1&quot;<br />
-	txdata = None<br />
-	txheaders =  {'User-agent' : 'Mozilla/4.0 (compatible; MSIE 5.5; Windows NT)'}<br />
-	# fake a user agent, some websites (like google) don't like automated exploration</p>
-<p>	try:</p>
-<p>		opts, args = getopt.getopt(argv, &quot;hu:p:&quot;, [&quot;help&quot;, &quot;username=&quot;,&quot;password=&quot;])<br />
-	except getopt.GetoptError:<br />
-		usage()<br />
-		exit(2)<br />
-	for opt, arg in opts:<br />
-		if opt in (&quot;-h&quot;, &quot;--help&quot;):<br />
-			usage()<br />
-			exit(2)<br />
-		elif opt in (&quot;-u&quot;, &quot;--username&quot;):<br />
-			username = arg<br />
-		elif opt in (&quot;-p&quot;, &quot;--password&quot;):<br />
-			password = arg</p>
-<p>	myhtmlsession = HTMLSession(txheaders)<br />
-	response = myhtmlsession.openURI(theurl, None)</p>
-<p>	if response == None:<br />
-		sys.exit(0)</p>
-<p>	hiddenval = getHiddenRandHTMLResponse(response)<br />
-	txdata = urllib.urlencode({'username':username, 'password':password, 'multiform':hiddenval, 'submit': &quot;Log in&quot;})</p>
-<p>	response = myhtmlsession.openURI(theurl, txdata)<br />
-	if response == None:<br />
-		sys.exit(0)</p>
-<p>	#we should sleep here for about 10 seconds.<br />
-	if checkLogin(response):<br />
-		print('We have succesfully logged into DynDNS.')</p>
-<p>	response = myhtmlsession.openURI(thelogouturl, None)<br />
-	if response == None:<br />
-		sys.exit(0)</p>
-<p>if __name__ == &quot;__main__&quot;:<br />
-	main(sys.argv[1:])<br />
-[/python] </p>
+{% highlight python %}
+#!/usr/bin/python
+import urllib
+import urllib2
+import cookielib
+import getopt
+import sys
+def getRandHTMLResponse(response):
+	target = "<form id='login"
+	targetresponse = "<div id='loginbox'"
+	response = response[response.find(targetresponse):len(response)]
+	return response[response.find(target)+len(target):response.find(target)+len(target):response.find(target)+len(target)+4]
+
+def getHiddenRandHTMLResponse(response):
+	target = "<input type='hidden' name='multiform' value='"
+	targetresponse = "<div id='loginbox'"
+	parsedres = response[response.find(targetresponse):len(response)]
+	return parsedres[parsedres.find(target)+len(target):parsedres.find(target)+len(target)+34]
+
+def checkLogin(response):
+	target = "<title>DynDNS.com - My Account</title>"
+	if response.find(target) == -1:
+		return False
+	return True
+
+class HTMLSession:
+	cj = None
+	opener = None
+	txHeaders = None
+	def __init__(self, txHeaders):
+		#The CookieJar will hold any cookies necessary throughout the login process.
+		self.cj = cookielib.MozillaCookieJar()
+		self.txHeaders = txHeaders
+		self.opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(self.cj))
+        	urllib2.install_opener(self.opener)
+	def setHeaders(self, txheaders):
+		self.txHeaders = txHeaders
+	def getHeaders(self):
+		return self.txHeaders
+	def openURI(self, uri, txdata):
+		try:
+			req = urllib2.Request(uri, txdata, self.txHeaders)
+			# create a request object
+			handle = urllib2.urlopen(req)
+			# and open it to return a handle on the url
+		except IOError as e:
+			print 'we failed to open "%s".' % uri
+			if hasattr(e, 'code'):
+				print 'We failed with error code - %s.' % e.code
+			elif hasattr(e, 'reason'):
+				print "The error object has the following 'reason' attribute :"
+				print e.reason
+				print "This usually means the server doesn't exist,'"
+				print "is down, or we don't have an internet connection."
+				return None
+		else:
+			return handle.read()
+def main(argv):
+	username = ""
+	password = ""
+	hiddenval = ""
+	theurl = "https://www.dyndns.com/account/entrance/"
+	thelogouturl = "https://www.dyndns.com/account/entrance/?__logout=1"
+	txdata = None
+	txheaders =  {'User-agent' : 'Mozilla/4.0 (compatible; MSIE 5.5; Windows NT)'}
+	# fake a user agent, some websites (like google) don't like automated exploration
+	try:
+		opts, args = getopt.getopt(argv, "hu:p:", ["help", "username=","password="])
+	except getopt.GetoptError:
+		usage()
+		exit(2)
+	for opt, arg in opts:
+		if opt in ("-h", "--help"):
+			usage()
+			exit(2)
+		elif opt in ("-u", "--username"):
+			username = arg
+		elif opt in ("-p", "--password"):
+			password = arg
+	myhtmlsession = HTMLSession(txheaders)
+	response = myhtmlsession.openURI(theurl, None)
+	if response == None:
+		sys.exit(0)
+	hiddenval = getHiddenRandHTMLResponse(response)
+	txdata = urllib.urlencode({'username':username, 'password':password, 'multiform':hiddenval, 'submit': "Log in"})
+	response = myhtmlsession.openURI(theurl, txdata)
+	if response == None:
+		sys.exit(0)
+	#we should sleep here for about 10 seconds.
+	if checkLogin(response):
+		print('We have succesfully logged into DynDNS.')
+	response = myhtmlsession.openURI(thelogouturl, None)
+	if response == None:
+		sys.exit(0)
+if __name__ == "__main__":
+	main(sys.argv[1:])
+{% endhighlight %}
