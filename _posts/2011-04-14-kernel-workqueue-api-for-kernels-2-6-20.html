@@ -27,7 +27,7 @@ static void myworkerf(struct work_struct *);
 {% endhighlight %}
 The great thing is David Howells realized that we could use the container_of() kernel macro to grab the parent structure for a certain structure element, so the answer was to make sure the work_struct pointer we used when calling INIT_WORK was in fact contained in our <em>argument structure</em>.</p>
 {% highlight c %}
-structure myworkerargs {
+struct myworkerargs {
         /*...some struct elements...*/
         struct work_struct mywork;
         /*...other struct elements...*/
