@@ -24,7 +24,7 @@ author:
 ---
 <p>OK, so I recently decided I wanted to try my hands on processing, opencv, hopefully eventually interfacing with some arduino hacks. Nothing special, nothing new, just in the mood of experimenting a little bit with video and computer vision, you've all seen how big and popular augmented reality is becoming.</p>
 <p>Anyway, I configure my kernel to enable the video4linux ps2 camera drivers, I download <a href="http://processing.org/">processing</a>, I install <a href="http://sourceforge.net/projects/opencvlibrary/">OpenCV</a>, and finally get my hands on the <a href="http://ubaa.net/shared/processing/opencv/">OpenCV library for processing</a>. You have all the documentation you need at the links above to set up the environment. So I'm all pumped and ready to roll, about to testdrive a simple processing+opencv code snippet when I get:</p>
-<p>[bash]<br />
+<p><code>
  !!! required library not found : /usr/lib/libOpenCV.so: /usr/lib/libOpenCV.so: wrong ELF class: ELFCLASS32 (Possible cause: architecture word width mismatch)<br />
  Exception in thread &quot;Animation Thread&quot; java.lang.UnsatisfiedLinkError: hypermedia.video.OpenCV.capture(III)V<br />
  at hypermedia.video.OpenCV.capture(Native Method)<br />
@@ -33,7 +33,7 @@ author:
  at processing.core.PApplet.handleDraw(PApplet.java:1403)<br />
  at processing.core.PApplet.run(PApplet.java:1328)<br />
  at java.lang.Thread.run(Thread.java:619)</p>
-<p>[/bash]</p>
+ </code></p>
 <p>We don't really need to be geniuses to figure out what was going on there. Obviously the library shipped is a 32 bit binary. In my case I am on a 64 bit system, with a 64 bit OpenCV. But looking into the OpenCV library for processing I was relieved to see that the sources were included (this is why open source is so beautiful). Anyway, all we really have to do to solve this is recompile the library. Here are the steps you should follow:</p>
 <ol>
 <li>change to the directory where you installed the  opencv library, in my case I put it in the libraries directory within the processing directory.[bash]cd /opt/processing-1.2.1/libraries/OpenCV/source/java/hypermedia/video[/bash]</li>
