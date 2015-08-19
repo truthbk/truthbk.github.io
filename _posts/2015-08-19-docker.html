@@ -30,11 +30,11 @@ wouldn't you maybe want to spare your machine the burden of containerization? I 
 If you don't already run <a href="http://brew.sh">Homebrew</a>, please do, thank me later.<br />
 First you install docker in your OSX machine, the client.<br />
 {% highlight bash %}
-user@macbook$ brew install docker
+user@macbook:~$ brew install docker
 {% endhighlight %}
 Then jump into your Ubuntu box - we'll call it <i>docker_vps</i> from now on (this should be similar in any linux distro really), and setup docker there. Ubuntu will bring in all the container stuff when you install - on OSX can't do that because LXC containers require a linux kernel. You can actually follow the official docker instructions <a href="">here</a>. But just for reference, this is what I did:
 {% highlight bash %}
-user@docker_vps$ curl -sSL https://get.docker.com/ | sh
+user@docker_vps:~$ curl -sSL https://get.docker.com/ | sh
 {% endhighlight %}
 It will prompt you for the <i>sudo</i> password and install everything necessary.<br />
 At this stage I'd recommend you setup key-based authentication to your linux box from your OSX machine, but that's really up to you, <a href="https://www.digitalocean.com/community/tutorials/how-to-configure-ssh-key-based-authentication-on-a-linux-server">here's how</a>. Now let's modify docker's default configuration at <i>/etc/default/docker</i>, we need to do this so that docker not only listens on a local unix socket, but also for remote TCP connections (if you wish you can disable local connections altogether, I didn't).
@@ -43,19 +43,19 @@ DOCKER_OPTS="-H tcp://localhost:2375 -H unix:///var/run/docker.sock"
 {% endhighlight %}
 You should now be ready to start-up docker with the new settings, you know the drill:
 {% highlight bash %}
-user@docker_vps$ sudo service docker restart
+user@docker_vps:~$ sudo service docker restart
 {% endhighlight %}
 Also, make sure the service has been added to systemd or upstart (depending on the version of ubuntu you are running), you'll normally want the docker servicee to come up at boot time. At this point, you have two options, poke a hole in your firewall, or run a tunnel to your OSX box. I chose this second option, it's more secure, I just prefer it. We can now switch to the macbook, your OSX client whatever that may be, and open that tunnel up:
 {% highlight bash %}
-user@macbook$ ssh -N -L 2375:localhost:2375 user@docker_vps > /dev/null 2>&1
+user@macbook:~$ ssh -N -L 2375:localhost:2375 user@docker_vps > /dev/null 2>&1
 {% endhighlight %}
 Once that's done, let's try it out!
 {% highlight bash %}
-user@macbook$ docker -H tcp://localhost:2375 run -i -t ubuntu /bin/bash
+user@macbook:~$ docker -H tcp://localhost:2375 run -i -t ubuntu /bin/bash
 {% endhighlight %}
 Success? You're done! Just one more thing, if you want to avoid having to specify the <i>-H</i> option all the time you can create the <b>DOCKER_HOST</b> environment variable:
 {% highlight bash %}
-user@macbook$ export DOCKER_HOST="tcp://localhost:2375"
+user@macbook:~$ export DOCKER_HOST="tcp://localhost:2375"
 {% endhighlight %}
 Now lets start messing with docker!
 </p>
